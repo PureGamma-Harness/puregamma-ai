@@ -18,8 +18,16 @@ test("the actual Next runtime and native optimizer use patched local dependencie
   const [major, minor, patch] = runtime("next/package.json").version.split(".").map(Number);
   assert.ok(major === 15 && minor === 5 && patch >= 28, "review the security floor before changing the Next release line");
   const sharp = optimizer.getSharp(1);
+  // Include native binaries and dynamically required version metadata, not
+  // merely the JavaScript entrypoints. NODE_PATH must not mask missing files.
+  const nativeFiles = Object.keys(require.cache).filter((file) => /\/node_modules\/(?:@img\/sharp[^/]*|sharp)\//.test(file));
+  assert.ok(nativeFiles.some((file) => file.endsWith("/versions.json")), "native dependency version metadata must be loaded");
+  for (const file of nativeFiles) {
+    assert.ok(fs.realpathSync(file).startsWith(`${fs.realpathSync(root)}${path.sep}`), `native dependency escaped runtime directory: ${file}`);
+  }
   const [sharpMajor, sharpMinor, sharpPatch] = sharp.versions.sharp.split(".").map(Number);
   assert.ok(sharpMajor > 0 || sharpMinor > 35 || (sharpMinor === 35 && sharpPatch >= 5));
+  assert.equal(typeof sharp.versions.heif, "string", "the standalone artifact must retain native libheif version metadata");
   assert.equal(optimizer.isAvifDecodeSafe(sharp.versions.heif), true);
 });
 
@@ -37,6 +45,15 @@ test("normal local PNG optimization still works with the patched native library"
   const sharp = optimizer.getSharp(1);
   const buffer = await sharp({ create: { width: 16, height: 16, channels: 3, background: "#ffffff" } }).png().toBuffer();
   const result = await optimizer.imageOptimizer({ buffer, contentType: "image/png", cacheControl: null, etag: "fixture" }, params, config, { silent: true });
+  assert.equal(result.error, undefined);
+  assert.equal(result.contentType, "image/webp");
+  assert.equal((await sharp(result.buffer).metadata()).width, 8);
+});
+
+test("benign AVIF input is decoded only with the verified patched native library", async () => {
+  const sharp = optimizer.getSharp(1);
+  const buffer = await sharp({ create: { width: 16, height: 16, channels: 3, background: "#ffffff" } }).avif().toBuffer();
+  const result = await optimizer.imageOptimizer({ buffer, contentType: "image/avif", cacheControl: null, etag: "fixture-avif" }, { ...params, href: "/fixture.avif" }, config, { silent: true });
   assert.equal(result.error, undefined);
   assert.equal(result.contentType, "image/webp");
   assert.equal((await sharp(result.buffer).metadata()).width, 8);

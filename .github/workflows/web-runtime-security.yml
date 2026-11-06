@@ -51,7 +51,13 @@ jobs:
       - run: pnpm test:runtime-security
       - run: pnpm build
       - name: Verify the standalone runtime's actual image library
-        run: NEXT_RUNTIME_DIR=.next-build/standalone pnpm test:runtime-security
+        run: |
+          # Test outside the checkout so missing traced files cannot be
+          # silently resolved from an ancestor source node_modules directory.
+          runtime_dir=$(mktemp -d)
+          trap 'rm -rf "$runtime_dir"' EXIT
+          cp -R .next-build/standalone/. "$runtime_dir/"
+          NODE_PATH= NEXT_RUNTIME_DIR="$runtime_dir" pnpm test:runtime-security
       - name: Prepare standalone public and static assets
         run: |
           cp -R public .next-build/standalone/public
