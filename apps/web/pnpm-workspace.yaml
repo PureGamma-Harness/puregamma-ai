@@ -1,2 +1,11 @@
 allowBuilds:
   unrs-resolver: true
+
+# GHSA-g3hv-75wg-m249 affects minimatch >=7 <11.0.1.
+# Glob 10 consumes minimatch internals that changed in v11, so update the
+# Next ESLint plugin's glob too instead of forcing an incompatible child.
+# Preserve legacy minimatch 3 consumers. Remove overrides when upstream
+# parents declare patched dependency ranges.
+overrides:
+  "@typescript-eslint/typescript-estree>minimatch": 11.0.5
+  "@next/eslint-plugin-next>glob": 14.0.4
