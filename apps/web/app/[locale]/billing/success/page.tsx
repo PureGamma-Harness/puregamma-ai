@@ -3,12 +3,14 @@ import { PageHeader, ResearchCard } from "@/components/puregamma";
 import { type Locale, withLocale } from "@/i18n/routing";
 
 
-export function generateMetadata({ params }: { params: { locale: string } }) {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }) {
+  const params = await paramsPromise;
   const locale = params.locale === "zh" ? "zh" : "en";
   return { title: locale === "zh" ? "支付成功 | PureGamma AI" : "Payment Successful | PureGamma AI", description: locale === "zh" ? "订阅与充值支付成功确认。" : "Subscription and top-up payment confirmation." };
 }
 
-export default function BillingSuccessPage({ params }: { params: { locale: Locale } }) {
+export default async function BillingSuccessPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return (
     <div className="space-y-5">

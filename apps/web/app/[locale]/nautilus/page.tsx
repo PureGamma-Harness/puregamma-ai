@@ -3,5 +3,7 @@ import { StrategyRuntimeConsole } from "@/components/strategy-runtime-console";
 import { localizedMetadata } from "@/lib/metadata";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata { const locale = isLocale(params.locale) ? params.locale : "en"; return localizedMetadata(locale, "nautilus", "/nautilus"); }
-export default function NautilusPage({ params }: { params: { locale: Locale } }) { return <StrategyRuntimeConsole locale={params.locale} />; }
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise; const locale = isLocale(params.locale) ? params.locale : "en"; return localizedMetadata(locale, "nautilus", "/nautilus"); }
+export default async function NautilusPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise; return <StrategyRuntimeConsole locale={params.locale} />; }

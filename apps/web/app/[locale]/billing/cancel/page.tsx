@@ -3,12 +3,14 @@ import { PageHeader, ResearchCard } from "@/components/puregamma";
 import { type Locale, withLocale } from "@/i18n/routing";
 
 
-export function generateMetadata({ params }: { params: { locale: string } }) {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }) {
+  const params = await paramsPromise;
   const locale = params.locale === "zh" ? "zh" : "en";
   return { title: locale === "zh" ? "支付已取消 | PureGamma AI" : "Payment Cancelled | PureGamma AI", description: locale === "zh" ? "支付流程已取消。" : "The payment flow was cancelled." };
 }
 
-export default function BillingCancelPage({ params }: { params: { locale: Locale } }) {
+export default async function BillingCancelPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return (
     <div className="space-y-5">

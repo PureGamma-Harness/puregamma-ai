@@ -8,7 +8,6 @@ const { test } = require("node:test");
 // Resolve through the real consumers, not a separately installed test dependency.
 const nextConfig = createRequire(require.resolve("eslint-config-next/package.json"));
 const nextPlugin = createRequire(nextConfig.resolve("@next/eslint-plugin-next/package.json"));
-const globConsumer = createRequire(nextPlugin.resolve("glob/package.json"));
 const parserConsumer = createRequire(nextConfig.resolve("@typescript-eslint/parser/package.json"));
 const estreeConsumer = createRequire(parserConsumer.resolve("@typescript-eslint/typescript-estree/package.json"));
 
@@ -23,12 +22,11 @@ function fixture(t) {
   return root;
 }
 
-test("both affected dependency paths resolve patched minimatch", () => {
-  for (const consumer of [globConsumer, estreeConsumer]) {
-    const [major, minor, patch] = consumer("minimatch/package.json").version.split(".").map(Number);
-    assert.ok(major > 11 || (major === 11 && (minor > 0 || patch >= 1)));
-  }
-  assert.ok(Number(nextPlugin("glob/package.json").version.split(".")[0]) >= 14);
+test("TypeScript-ESLint resolves patched minimatch and Next no longer depends on glob", () => {
+  const [major, minor, patch] = estreeConsumer("minimatch/package.json").version.split(".").map(Number);
+  assert.ok(major > 11 || (major === 11 && (minor > 0 || patch >= 1)));
+  assert.equal(nextPlugin("./package.json").dependencies.glob, undefined);
+  assert.ok(nextPlugin("./package.json").dependencies["fast-glob"]);
 });
 
 test("legacy ESLint consumers retain the callable minimatch 3 API", () => {
@@ -41,16 +39,16 @@ test("legacy ESLint consumers retain the callable minimatch 3 API", () => {
 
 test("glob still finds wildcard and brace matches, and respects ignores", (t) => {
   const cwd = fixture(t);
-  const { globSync } = nextPlugin("glob");
+  const { globSync } = nextPlugin("fast-glob");
   assert.deepEqual(globSync("apps/*/*.tsx", { cwd }).sort(), ["apps/admin/page.tsx", "apps/web/page.tsx"]);
-  assert.deepEqual(globSync("apps/{admin,web}/**/*.tsx", { cwd, ignore: "apps/admin/**" }), ["apps/web/page.tsx"]);
+  assert.deepEqual(globSync("apps/{admin,web}/**/*.tsx", { cwd, ignore: ["apps/admin/**"] }), ["apps/web/page.tsx"]);
   assert.deepEqual(globSync("apps/web/*.tsx", { cwd, dot: true }).sort(), ["apps/web/.hidden.tsx", "apps/web/page.tsx"]);
 });
 
 test("Next ESLint root-directory globs still discover projects", (t) => {
   const cwd = fixture(t);
   const { getRootDirs } = nextPlugin("./dist/utils/get-root-dirs.js");
-  const roots = getRootDirs({ getCwd: () => cwd, settings: { next: { rootDir: `${cwd}/apps/{web,admin}` } } });
+  const roots = getRootDirs({ cwd, settings: { next: { rootDir: `${cwd}/apps/{web,admin}` } } });
   assert.deepEqual(roots.map((p) => path.basename(p.replace(/\/$/, ""))).sort(), ["admin", "web"]);
 });
 

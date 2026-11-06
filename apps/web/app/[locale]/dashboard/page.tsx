@@ -29,12 +29,14 @@ function isFreshMarketBrief(report: ReportRow): boolean {
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 36 * 60 * 60 * 1000;
 }
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "dashboard", "/dashboard");
 }
 
-export default async function DashboardPage({ params }: { params: { locale: Locale } }) {
+export default async function DashboardPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const zh = locale === "zh";
   const copy = getMessageNamespace(locale, "dashboard");

@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/puregamma";
 import { getGatewayDashboard, getGatewayKeys, getGatewayRequests, getGatewayUsage } from "@/lib/api";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return {
     title: "PureGamma AI API Gateway",
@@ -12,7 +13,8 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
   };
 }
 
-export default async function GatewayPage({ params }: { params: { locale: Locale } }) {
+export default async function GatewayPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const [dashboard, keys, requests, usage] = await Promise.all([

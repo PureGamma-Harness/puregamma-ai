@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function NautilusRedirect() {
-  redirectToLocalized("/nautilus");
+export default async function NautilusRedirect() {
+  return redirectToLocalized("/nautilus");
 }

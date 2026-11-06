@@ -4,13 +4,15 @@ import { ChronoSlices, ChronoSlice } from "@/components/chrono/chrono-slices";
 import { isLocale, type Locale } from "@/i18n/routing";
 import { IntelligenceShell } from "@/components/terminal/intelligence-shell";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   const zh = locale === "zh";
   return { title: zh ? "Agent 对话 | PureGamma AI" : "Agent Chat | PureGamma AI", description: zh ? "与研究 Agent 对话：策略、事件、风险与投资笔记。" : "Chat with your research Agent about strategies, events, risk, and notes." };
 }
 
-export default function ChatPage({ params }: { params: { locale: Locale } }) {
+export default async function ChatPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   return (
     <ChronoSlices>
       <ChronoSlice>

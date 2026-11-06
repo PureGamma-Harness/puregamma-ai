@@ -25,12 +25,14 @@ function manualReviewReason(intent: BillingIntentRow) {
   return typeof value === "string" ? value : undefined;
 }
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "admin", "/admin/billing-intents");
 }
 
-export default async function BillingIntentsPage({ params }: { params: { locale: Locale } }) {
+export default async function BillingIntentsPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "admin");
   const data = await api<{ billing_intents: BillingIntentRow[] }>("/admin/billing-intents", {

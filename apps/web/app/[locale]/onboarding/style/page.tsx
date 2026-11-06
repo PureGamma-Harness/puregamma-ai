@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Crosshair, Globe, Info, Shield, TrendingUp, Zap, type LucideIcon } from "lucide-react";
 import { normalizeLocale, withLocale } from "@/i18n/routing";
 import { SelectionBox } from "@/components/selection-box";
@@ -15,7 +15,8 @@ const styleIcons: Record<string, LucideIcon> = {
   "high-beta": Crosshair
 };
 
-export default function LocalizedOnboardingStylePage({ params }: { params: { locale: string } }) {
+export default function LocalizedOnboardingStylePage() {
+  const params = useParams<{ locale: string }>();
   const locale = normalizeLocale(params.locale);
   const router = useRouter();
   const copy = getMessageNamespace(locale, "onboarding").style;

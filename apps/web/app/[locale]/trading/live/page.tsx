@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { LiveTradingConsole } from "@/components/live-trading-console";
 import { isLocale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const zh = isLocale(params.locale) && params.locale === "zh";
   return {
     title: zh ? "实盘总览 | PureGamma AI" : "LIVE Trading Overview | PureGamma AI",
@@ -10,7 +11,8 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
   };
 }
 
-export default function LiveTradingOverviewPage({ params }: { params: { locale: string } }) {
+export default async function LiveTradingOverviewPage({ params: paramsPromise }: { params: Promise<{ locale: string }> }) {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return <LiveTradingConsole locale={locale} view="overview" />;
 }

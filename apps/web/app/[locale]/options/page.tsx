@@ -8,7 +8,8 @@ import { PGTable } from "@/components/pg-table";
 import { getEarningsGamma, getLongGammaCandidates } from "@/lib/api";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return {
     title: zh ? "Deribit 期权研究 | PureGamma AI" : "Deribit Options Research | PureGamma AI",
@@ -16,7 +17,9 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
   };
 }
 
-export default async function OptionsPage({ params, searchParams }: { params: { locale: Locale }; searchParams: { currency?: string } }) {
+export default async function OptionsPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ locale: Locale }>; searchParams: Promise<{ currency?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   const zh = locale === "zh";
   const currency = searchParams.currency === "ETH" ? "ETH" : "BTC";

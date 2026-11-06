@@ -5,7 +5,8 @@ import { Badge, PGResearchCard } from "@/components/puregamma";
 import { localizedMetadata } from "@/lib/metadata";
 import { isLocale, type Locale, withLocale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "landing", "/pricing");
 }
@@ -83,7 +84,8 @@ const PLANS: PlanInfo[] = [
   },
 ];
 
-export default function PricingPage({ params }: { params: { locale: Locale } }) {
+export default async function PricingPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return (
     <div className="space-y-12 py-4">

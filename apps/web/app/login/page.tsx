@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function LoginRedirect() {
-  redirectToLocalized("/login");
+export default async function LoginRedirect() {
+  return redirectToLocalized("/login");
 }

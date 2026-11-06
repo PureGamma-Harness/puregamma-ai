@@ -1,0 +1,69 @@
+name: Web runtime security
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'tests/e2e/playwright/next-upgrade-smoke.spec.ts'
+      - '.github/workflows/web-runtime-security.yml'
+  push:
+    branches: [main, refactor/harness-core-v2]
+    paths:
+      - 'apps/web/**'
+      - 'tests/e2e/playwright/next-upgrade-smoke.spec.ts'
+      - '.github/workflows/web-runtime-security.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-runtime-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3196
+      NEXT_PUBLIC_INITIAL_LAUNCH_MODE: 'false'
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm test:dependency-compat
+      - run: pnpm test:runtime-security
+      - run: pnpm build
+      - name: Verify the standalone runtime's actual image library
+        run: NEXT_RUNTIME_DIR=.next-build/standalone pnpm test:runtime-security
+      - name: Prepare standalone public and static assets
+        run: |
+          cp -R public .next-build/standalone/public
+          mkdir -p .next-build/standalone/.next-build
+          cp -R .next-build/static .next-build/standalone/.next-build/static
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:upgrade-smoke
+      - name: Preserve browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-runtime-security-traces
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

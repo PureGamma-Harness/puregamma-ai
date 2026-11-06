@@ -53,7 +53,7 @@ async function resolveApiUrl(): Promise<string> {
   if (typeof window !== "undefined" || ABSOLUTE_URL.test(API_URL)) return API_URL;
   try {
     const { headers } = await import("next/headers");
-    const incoming = headers();
+    const incoming = await headers();
     const host = incoming.get("x-forwarded-host") || incoming.get("host");
     if (!host) return API_URL;
     const protocol = incoming.get("x-forwarded-proto") || "http";
@@ -95,7 +95,7 @@ function redirectIfInsufficientCredits() {
 async function forwardedSessionHeaders(): Promise<Record<string, string>> {
   if (typeof window !== "undefined") return {};
   const { cookies } = await import("next/headers");
-  const value = cookies().toString();
+  const value = (await cookies()).toString();
   return value ? { Cookie: value } : {};
 }
 

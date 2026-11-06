@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function AdminRedirect() {
-  redirectToLocalized("/admin");
+export default async function AdminRedirect() {
+  return redirectToLocalized("/admin");
 }

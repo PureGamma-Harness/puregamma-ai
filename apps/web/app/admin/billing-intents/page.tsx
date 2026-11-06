@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function BillingIntentsRedirect() {
-  redirectToLocalized("/admin/billing-intents");
+export default async function BillingIntentsRedirect() {
+  return redirectToLocalized("/admin/billing-intents");
 }

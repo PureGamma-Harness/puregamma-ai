@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function ReportsRedirect() {
-  redirectToLocalized("/reports");
+export default async function ReportsRedirect() {
+  return redirectToLocalized("/reports");
 }

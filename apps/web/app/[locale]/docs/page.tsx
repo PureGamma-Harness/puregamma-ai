@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { DocsEmbed } from "@/components/docs-embed";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const zh = isLocale(params.locale) && params.locale === "zh";
   return {
     title: zh ? "帮助文档 | PureGamma AI" : "Documentation | PureGamma AI",
@@ -12,6 +13,7 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
   };
 }
 
-export default function DocsPage({ params }: { params: { locale: Locale } }) {
+export default async function DocsPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   return <DocsEmbed />;
 }

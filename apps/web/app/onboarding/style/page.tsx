@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function OnboardingStyleRedirect() {
-  redirectToLocalized("/onboarding/style");
+export default async function OnboardingStyleRedirect() {
+  return redirectToLocalized("/onboarding/style");
 }

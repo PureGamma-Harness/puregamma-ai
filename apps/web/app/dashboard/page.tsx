@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function DashboardRedirect() {
-  redirectToLocalized("/dashboard");
+export default async function DashboardRedirect() {
+  return redirectToLocalized("/dashboard");
 }

@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function StripeEventsRedirect() {
-  redirectToLocalized("/admin/stripe-events");
+export default async function StripeEventsRedirect() {
+  return redirectToLocalized("/admin/stripe-events");
 }

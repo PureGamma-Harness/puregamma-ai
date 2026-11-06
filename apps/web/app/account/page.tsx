@@ -1,2 +1,2 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
-export default function AccountRedirect() { redirectToLocalized("/account"); }
+export default async function AccountRedirect() { return redirectToLocalized("/account"); }
