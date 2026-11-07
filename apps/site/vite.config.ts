@@ -13,6 +13,9 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
+  // Keep the deployed Worker contract independent of local tooling updates.
+  compatibility_date: "2026-05-15",
+  upload_source_maps: false,
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [

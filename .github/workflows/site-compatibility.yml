@@ -31,6 +31,7 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       WRANGLER_SEND_METRICS: 'false'
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
       WRANGLER_WRITE_LOGS: 'false'
       WRANGLER_LOG_PATH: .wrangler/ci.log
     steps:
