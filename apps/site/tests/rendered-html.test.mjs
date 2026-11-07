@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 async function render(t) {
   process.env.WRANGLER_SEND_METRICS = "false";
+  process.env.CLOUDFLARE_CF_FETCH_ENABLED = "false";
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/rendered-html-test.log";
   const { unstable_dev } = await import("wrangler");
   const worker = await unstable_dev(
@@ -23,8 +24,6 @@ async function render(t) {
         disableDevRegistry: true,
         enableContainers: false,
         forceLocal: true,
-        testMode: true,
-        watch: false,
       },
     },
   );
@@ -89,5 +88,5 @@ test("keeps launch claims and metadata aligned with the current product", async 
   assert.doesNotMatch(page, /guaranteed return|保证收益|codex-preview|SkeletonPreview/i);
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /summary_large_image/);
-  assert.match(packageJson, /"test": "npm run build && node --test tests\/\*\.test\.mjs"/);
+  assert.match(packageJson, /"test": "CLOUDFLARE_CF_FETCH_ENABLED=false npm run build && CLOUDFLARE_CF_FETCH_ENABLED=false node --test tests\/\*\.test\.mjs"/);
 });
