@@ -10,8 +10,8 @@ is a point-in-time record, not the current state.
 
 ## Current state
 
-This README describes the trunk: `main`, currently identical to
-`refactor/harness-core-v2`. It is a source release candidate, **not a
+This README describes the default branch, `refactor/harness-core-v2`.
+It is a source release candidate, **not a
 production-deployment claim**. Enabling optional providers, Harness/Memory,
 broker connectivity, or LIVE trading remains subject to environment
 configuration, explicit feature gates, approvals, and the deployment runbooks.
