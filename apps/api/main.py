@@ -68,6 +68,18 @@ app.add_middleware(
 )
 
 
+def _request_path(request: Request) -> str:
+    """Use the trusted ASGI route path, with the router's mount semantics."""
+    path = request.scope["path"]
+    root_path = request.scope.get("root_path", "")
+    if root_path and path.startswith(root_path):
+        route_path = path[len(root_path):]
+        # Strip a mount prefix only at a complete path-segment boundary.
+        if not route_path or route_path.startswith("/"):
+            return route_path
+    return path
+
+
 @app.middleware("http")
 async def cookie_csrf_guard(request: Request, call_next):
     """Require an approved Origin for browser state changes using the session cookie."""
@@ -76,7 +88,7 @@ async def cookie_csrf_guard(request: Request, call_next):
         and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
         and request.cookies.get(settings.session_cookie_name)
         and not request.headers.get("authorization")
-        and request.url.path != "/stripe/webhook"
+        and _request_path(request) != "/stripe/webhook"
     ):
         origin = request.headers.get("origin", "").rstrip("/")
         if origin not in settings.cors_origins:
@@ -89,7 +101,8 @@ async def cookie_csrf_guard(request: Request, call_next):
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    if settings.app_environment.lower() != "production" or request.url.path in {"/health", "/ready", "/metrics", "/stripe/webhook"}:
+    path = _request_path(request)
+    if settings.app_environment.lower() != "production" or path in {"/health", "/ready", "/metrics", "/stripe/webhook"}:
         return await call_next(request)
     # Only X-Real-IP (set by the edge proxy from the socket peer) is trusted;
     # X-Forwarded-For is client-controllable and must never feed rate limits.
@@ -97,7 +110,7 @@ async def rate_limit(request: Request, call_next):
         request.headers.get("x-real-ip", "").strip()
         or (request.client.host if request.client else "unknown")
     )
-    expensive = any(part in request.url.path for part in _expensive_paths)
+    expensive = any(part in path for part in _expensive_paths)
     limit = settings.expensive_rate_limit_per_minute if expensive else settings.api_rate_limit_per_minute
     minute = int(time.time() // 60)
     bucket_key = f"pg:rate:{'expensive' if expensive else 'general'}:{client}:{minute}"
@@ -126,15 +139,16 @@ async def rate_limit(request: Request, call_next):
 
 @app.middleware("http")
 async def request_trace(request: Request, call_next):
+    path = _request_path(request)
     request_id = request.headers.get("x-request-id", "")[:128] or str(uuid.uuid4())
     started = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
-        logger.exception("request_failed", extra={"request_id": request_id, "method": request.method, "path": request.url.path})
+        logger.exception("request_failed", extra={"request_id": request_id, "method": request.method, "path": path})
         raise
     response.headers["X-Request-ID"] = request_id
-    logger.info("request_completed", extra={"request_id": request_id, "method": request.method, "path": request.url.path, "status_code": response.status_code, "duration_ms": int((time.perf_counter() - started) * 1000)})
+    logger.info("request_completed", extra={"request_id": request_id, "method": request.method, "path": path, "status_code": response.status_code, "duration_ms": int((time.perf_counter() - started) * 1000)})
     return response
 
 
