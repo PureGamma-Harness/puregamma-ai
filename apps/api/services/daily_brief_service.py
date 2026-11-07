@@ -264,16 +264,38 @@ def _local_brief(context: dict, language: str, disclaimer: str) -> str:
             else f"{symbol} funding {float(funding):.3%}: watch crowding"
         )
 
+    def portfolio_line(zh: bool) -> str | None:
+        portfolio = context.get("portfolio") or {}
+        if not portfolio.get("connected"):
+            return None
+        if portfolio.get("stale"):
+            return "组合快照已过期，请同步后查看净值与持仓" if zh else "Portfolio snapshot is stale; sync before reviewing NAV and holdings"
+        nav = portfolio.get("total_nav")
+        if nav is None:
+            return "组合快照净值暂不可用" if zh else "Portfolio snapshot NAV is unavailable"
+        partial = bool(portfolio.get("missing_data"))
+        label = ("部分组合快照净值" if partial else "组合快照净值") if zh else ("Partial portfolio snapshot NAV" if partial else "Portfolio snapshot NAV")
+        line = f"{label}: ${float(nav):,.2f}"
+        holdings = portfolio.get("top_holdings") or []
+        if holdings and holdings[0].get("symbol") and holdings[0].get("weight") is not None:
+            line += f"; {holdings[0]['symbol']} {float(holdings[0]['weight']):.1%}"
+        providers = {account["provider"] for account in portfolio.get("accounts") or [] if account.get("provider")}
+        if providers:
+            source = next(iter(providers)) if len(providers) == 1 else ("多来源" if zh else "multiple providers")
+            line += f" ({source})"
+        return line
+
     primary_quotes = [line for line in (quote_line("BTC", language == "zh"), quote_line("ETH", language == "zh"), quote_line("HYPE", language == "zh")) if line]
     breadth_summary = breadth_line(language == "zh")
     crowding = crowding_line(language == "zh")
+    portfolio_summary = portfolio_line(language == "zh")
     if language == "zh":
         view = f"{context['market_regime']}。"
         if breadth_summary:
             view += f" {breadth_summary}。"
         lines = ["## 今日判断", view, "", "## 关注"]
         lines.append("- " + (primary_quotes[0] if primary_quotes else "主流市场报价暂不可用"))
-        lines.append("- " + (crowding or breadth_summary or "Hyperliquid 广度数据暂不可用"))
+        lines.append("- " + (portfolio_summary or crowding or breadth_summary or "Hyperliquid 广度数据暂不可用"))
         lines.extend(["", "## 风险线"])
         lines.append("- 若涨跌广度转弱且资金费率继续扩张，警惕杠杆回撤。")
     else:
@@ -282,7 +304,7 @@ def _local_brief(context: dict, language: str, disclaimer: str) -> str:
             view += f" {breadth_summary}."
         lines = ["## Today's view", view, "", "## Focus"]
         lines.append("- " + (primary_quotes[0] if primary_quotes else "Core market quotes are unavailable"))
-        lines.append("- " + (crowding or breadth_summary or "Hyperliquid breadth data is unavailable"))
+        lines.append("- " + (portfolio_summary or crowding or breadth_summary or "Hyperliquid breadth data is unavailable"))
         lines.extend(["", "## Risk line"])
         lines.append("- Watch for weakening breadth alongside expanding funding: leverage can amplify a reversal.")
     return _compact_daily_brief("\n".join(lines).rstrip() + f"\n\n{disclaimer}", language)
