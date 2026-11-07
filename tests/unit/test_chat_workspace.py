@@ -276,6 +276,69 @@ def test_file_validation_and_image_normalization():
     assert Image.open(io.BytesIO(payload)).width == 2048
 
 
+def _pdf_attachment(*, pages=1, encrypted=False):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    page[NameObject("/Resources")] = DictionaryObject({
+        NameObject("/Font"): DictionaryObject({
+            NameObject("/F1"): DictionaryObject({
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }),
+        }),
+    })
+    content = DecodedStreamObject()
+    content.set_data(b"BT /F1 12 Tf 72 720 Td (Quarterly attachment text) Tj ET")
+    page[NameObject("/Contents")] = writer._add_object(content)
+    for _ in range(pages - 1):
+        writer.add_blank_page(width=612, height=792)
+    if encrypted:
+        writer.encrypt("local-test-password")
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def test_pdf_upload_extracts_text_and_preserves_download(api_client, db, normal_user):
+    raw = _pdf_attachment()
+    headers = auth_headers(normal_user)
+    response = api_client.post("/api/agent/attachments?name=quarterly.pdf", content=raw, headers=headers)
+    assert response.status_code == 200, response.text
+    item = response.json()["attachment"]
+    assert (item["kind"], item["mime"]) == ("file", "application/pdf")
+    assert api_client.get(item["url"], headers=headers).content == raw
+    resolved = resolve_attachments(db, normal_user.id, [{"id": item["id"]}])
+    assert resolved[0]["content"].strip() == "Quarterly attachment text"
+
+
+@pytest.mark.parametrize("raw", [b"This document is not a PDF.", b"%PDF-1.7\n%%EOF\n"])
+def test_unreadable_pdf_upload_is_rejected(api_client, normal_user, raw):
+    response = api_client.post(
+        "/api/agent/attachments?name=unreadable.pdf", content=raw, headers=auth_headers(normal_user),
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "ATTACHMENT_INVALID"
+
+
+def test_pdf_attachment_page_encryption_and_byte_limits(monkeypatch):
+    import apps.api.services.chat_workspace as workspace
+
+    # The documented 100-page boundary stays usable; the next page is refused.
+    assert "Quarterly attachment text" in prepare_file("pages.pdf", _pdf_attachment(pages=100))[2]
+    with pytest.raises(ValueError, match="ATTACHMENT_PDF_LIMIT"):
+        prepare_file("pages.pdf", _pdf_attachment(pages=101))
+    with pytest.raises(ValueError, match="ATTACHMENT_PDF_LIMIT"):
+        prepare_file("encrypted.pdf", _pdf_attachment(encrypted=True))
+    raw = _pdf_attachment()
+    monkeypatch.setattr(workspace, "MAX_FILE_BYTES", len(raw) - 1)
+    with pytest.raises(ValueError, match="ATTACHMENT_SIZE_LIMIT"):
+        prepare_file("large.pdf", raw)
+
+
 def test_small_images_are_stored_as_they_arrived():
     """A 1x1 PNG is a legitimate upload.
 
