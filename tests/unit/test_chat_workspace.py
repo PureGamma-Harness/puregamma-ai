@@ -374,6 +374,123 @@ def test_a_format_we_do_not_serve_is_converted_and_a_truncated_file_is_refused()
         prepare_file("truncated.png", valid.getvalue()[: len(valid.getvalue()) // 2])
 
 
+def test_uploaded_jpeg_exif_orientation_is_applied_and_removed(api_client, normal_user):
+    image = Image.new("RGB", (80, 40), "red")
+    image.paste("blue", (40, 0, 80, 40))
+    exif = Image.Exif()
+    exif[274] = 6  # Display by rotating 90 degrees clockwise.
+    source = io.BytesIO()
+    image.save(source, format="JPEG", quality=95, exif=exif)
+
+    headers = auth_headers(normal_user)
+    upload = api_client.post(
+        "/api/agent/attachments?name=oriented.jpg", content=source.getvalue(), headers=headers,
+    )
+    assert upload.status_code == 200, upload.text
+    item = upload.json()["attachment"]
+    assert (item["kind"], item["mime"]) == ("image", "image/jpeg")
+    download = api_client.get(item["url"], headers=headers)
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "image/jpeg"
+    with Image.open(io.BytesIO(download.content)) as normalized:
+        normalized.load()
+        assert normalized.size == (40, 80)
+        assert normalized.mode == "RGB"
+        assert normalized.getexif().get(274) is None
+        top = normalized.getpixel((20, 10))
+        bottom = normalized.getpixel((20, 70))
+        assert top[0] > 200 and top[2] < 50
+        assert bottom[2] > 200 and bottom[0] < 50
+
+
+def test_uploaded_animated_gif_uses_its_first_frame(api_client, normal_user):
+    first = Image.new("RGB", (40, 30), "red")
+    second = Image.new("RGB", first.size, "blue")
+    source = io.BytesIO()
+    first.save(source, format="GIF", save_all=True, append_images=[second], duration=100, loop=0)
+
+    headers = auth_headers(normal_user)
+    upload = api_client.post(
+        "/api/agent/attachments?name=animated.gif", content=source.getvalue(), headers=headers,
+    )
+    assert upload.status_code == 200, upload.text
+    item = upload.json()["attachment"]
+    assert (item["kind"], item["mime"]) == ("image", "image/jpeg")
+    download = api_client.get(item["url"], headers=headers)
+    assert download.status_code == 200
+    with Image.open(io.BytesIO(download.content)) as normalized:
+        normalized.load()
+        assert normalized.format == "JPEG"
+        assert normalized.size == first.size
+        assert getattr(normalized, "n_frames", 1) == 1
+        red, _, blue = normalized.getpixel((20, 15))
+        assert red > 200 and blue < 50
+
+
+@pytest.mark.parametrize("width,status", [(5000, 200), (5001, 400)])
+def test_image_upload_pixel_limit(api_client, db, normal_user, width, status):
+    # Monochrome PNGs keep these real 20MP fixtures small on disk.
+    source = io.BytesIO()
+    Image.new("1", (width, 4000)).save(source, format="PNG")
+    response = api_client.post(
+        "/api/agent/attachments?name=large.png", content=source.getvalue(),
+        headers=auth_headers(normal_user),
+    )
+    assert response.status_code == status, response.text
+    rows = db.query(AgentAttachmentRecord).filter_by(user_id=normal_user.id).all()
+    if status == 400:
+        assert response.json()["detail"] == "ATTACHMENT_IMAGE_LIMIT"
+        assert rows == []
+    else:
+        assert len(rows) == 1
+        assert rows[0].mime == "image/jpeg"
+        with Image.open(io.BytesIO(rows[0].payload)) as normalized:
+            normalized.load()
+            assert normalized.size == (2048, 1638)
+
+
+@pytest.mark.parametrize("kind", ["invalid", "truncated", "unsupported"])
+def test_invalid_image_upload_does_not_store_bytes(api_client, db, normal_user, kind):
+    source = io.BytesIO()
+    Image.new("RGB", (256, 256), "green").save(
+        source, format="BMP" if kind == "unsupported" else "PNG",
+    )
+    raw = source.getvalue()
+    if kind == "invalid":
+        raw = b"not an image"
+    elif kind == "truncated":
+        raw = raw[: len(raw) // 2]
+    response = api_client.post(
+        "/api/agent/attachments?name=invalid.png", content=raw, headers=auth_headers(normal_user),
+    )
+    assert response.status_code == 400, response.text
+    expected = "ATTACHMENT_IMAGE_LIMIT" if kind == "unsupported" else "ATTACHMENT_INVALID"
+    assert response.json()["detail"] == expected
+    assert db.query(AgentAttachmentRecord).filter_by(user_id=normal_user.id).count() == 0
+
+
+def test_image_upload_byte_limit(api_client, db, normal_user, monkeypatch):
+    from apps.api.routers import agent as agent_router
+    from apps.api.services import chat_workspace
+
+    source = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(source, format="PNG")
+    raw = source.getvalue()
+    monkeypatch.setattr(agent_router, "MAX_FILE_BYTES", len(raw))
+    monkeypatch.setattr(chat_workspace, "MAX_FILE_BYTES", len(raw))
+    headers = auth_headers(normal_user)
+    accepted = api_client.post("/api/agent/attachments?name=icon.png", content=raw, headers=headers)
+    assert accepted.status_code == 200, accepted.text
+    rejected = api_client.post(
+        "/api/agent/attachments?name=oversized.png", content=raw + b"x", headers=headers,
+    )
+    assert rejected.status_code == 413, rejected.text
+    assert rejected.json()["detail"] == "ATTACHMENT_SIZE_LIMIT"
+    with pytest.raises(ValueError, match="ATTACHMENT_SIZE_LIMIT"):
+        prepare_file("oversized.png", raw + b"x")
+    assert db.query(AgentAttachmentRecord).filter_by(user_id=normal_user.id).count() == 1
+
+
 @pytest.mark.parametrize("mode,unknown,stateful", [
     ("read-only", "deny", "deny"),
     ("workspace-write", "deny", "ask"),

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import importlib
+import io
 import sys
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 RELAY_DIR = str(Path(__file__).resolve().parents[2] / "apps" / "pocket-relay")
 RELAY_MODULES = ("config", "pin", "tunnel", "qr", "main")
@@ -135,6 +137,11 @@ def test_public_qr_and_control_page(client, relay, monkeypatch):
     assert qr.status_code == 200
     assert qr.headers["content-type"] == "image/png"
     assert qr.content.startswith(b"\x89PNG\r\n\x1a\n")
+    with Image.open(io.BytesIO(qr.content)) as image:
+        image.load()
+        assert image.format == "PNG"
+        assert image.width == image.height and image.width > 0
+        assert image.convert("L").getextrema() == (0, 255)
     page = client.get("/_pocket")
     assert page.status_code == 200
     assert "手机访问" in page.text
