@@ -4,7 +4,7 @@ PureGamma AI is research software only. Local reports and signals are demo data 
 ## 1. Prerequisites
 Install:
 - Python 3.11 or newer.
-- Node.js 20 or >=22 (use a current LTS; Node 21 is unsupported by the patched lint dependencies).
+- Node.js 22.x or >=24 (use a supported LTS release; production uses Node.js 22, and CI covers Node.js 22 and 24).
 - `pnpm`.
 - Docker Desktop or compatible Docker runtime.
 - Optional: Stripe CLI for webhook tests.

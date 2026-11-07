@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/pnpm-workspace.yaml ./
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate \
@@ -14,7 +14,7 @@ ENV NEXT_PUBLIC_INITIAL_LAUNCH_MODE=$NEXT_PUBLIC_INITIAL_LAUNCH_MODE
 ENV NEXT_PUBLIC_ALLOW_MOCK_FALLBACK=$NEXT_PUBLIC_ALLOW_MOCK_FALLBACK
 RUN npm run build
 
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
