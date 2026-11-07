@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
+from app.order_safety import reduce_only_rejection
+
 
 class RuntimeRiskGateway:
     def __init__(self, store=None):
@@ -14,13 +16,16 @@ class RuntimeRiskGateway:
 
     def evaluate(self, order: dict, policy: dict, account: dict) -> dict:
         reasons: list[str] = []
+        if order.get("reduce_only"):
+            positions = self.store.list_paper_positions(order["account_id"]) if self.store is not None else None
+            reduction_error = reduce_only_rejection(order, positions)
+            if reduction_error:
+                reasons.append(reduction_error)
         if self.global_kill_switch:
             reasons.append("GLOBAL_KILL_SWITCH")
-        if order["account_id"] in self.pause_opening_accounts and not order.get(
-            "reduce_only"
-        ):
+        if order["account_id"] in self.pause_opening_accounts and order.get("reduce_only") is not True:
             reasons.append("OPENING_PAUSED")
-        if order.get("run_id") in self.paused_run_ids and not order.get("reduce_only"):
+        if order.get("run_id") in self.paused_run_ids and order.get("reduce_only") is not True:
             reasons.append("RUN_PAUSED")
         if order.get("mode") not in {"PAPER", "SHADOW"}:
             reasons.append("LIVE_EXECUTION_DISABLED")

@@ -48,9 +48,16 @@ class ShadowExecutionAdapter(MockExchangeGateway):
         return cost / float(order["quantity"]), float(order["quantity"])
 
     def submit_order(self, order: dict) -> dict:
+        with self._submission_lock(order["account_id"]):
+            return self._submit_shadow_order_locked(order)
+
+    def _submit_shadow_order_locked(self, order: dict) -> dict:
         existing = self.orders.get(order["client_order_id"])
         if existing:
             return existing
+        rejected = self._reject_invalid_reduction(order)
+        if rejected is not None:
+            return {**rejected, "shadow": True}
         fill = self._book_fill(order)
         if fill is None:
             # No executable depth: rest the order without filling it.
