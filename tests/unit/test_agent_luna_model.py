@@ -123,6 +123,7 @@ def test_capabilities_report_luna_plan_and_availability(db, normal_user, max_use
         "available": False,
         "reason": "plan_required",
         "credit_cost": None,
+        "category": "generation",
     }
     assert max_option["available"] is True
     assert max_option["reason"] is None

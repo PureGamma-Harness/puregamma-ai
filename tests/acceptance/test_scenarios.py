@@ -211,6 +211,7 @@ def test_scenario_c_event_alert_exactly_once(db, user_factory, monkeypatch):
     )
     channels = ["email", "telegram", "web"]
 
+    before = user.credit_balance
     first = research_event_service.create_alert_for_event(db, event, channels=channels)
     assert first == {"users": 1, "alerts": 1, "deliveries": 3}
 
@@ -226,9 +227,19 @@ def test_scenario_c_event_alert_exactly_once(db, user_factory, monkeypatch):
     deliveries = db.query(NotificationDelivery).filter(NotificationDelivery.user_id == user.id).all()
     assert len(deliveries) == 3
     assert {row.channel for row in deliveries} == {"email", "telegram", "web"}
-    assert {row.status for row in deliveries} == {"sent"}
+    assert {row.channel: row.status for row in deliveries} == {
+        "email": "skipped", "telegram": "skipped", "web": "sent",
+    }
+    db.refresh(user)
+    assert user.credit_balance == before
     for row in deliveries:
         assert row.idempotency_key == f"event-alert:{user.id}:{event.id}:{row.channel}"
+        if row.channel == "web":
+            assert row.provider_response == {"reason": "web_inbox"}
+            assert row.sent_at is not None
+        else:
+            assert row.provider_response == {"reason": "mock_recipient"}
+            assert row.sent_at is None
 
     # Rerun the alert generation path: zero new rows.
     second = research_event_service.create_alert_for_event(db, event, channels=channels)
