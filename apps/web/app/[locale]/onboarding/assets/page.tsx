@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Info } from "lucide-react";
 import { Badge } from "@/components/puregamma";
 import { normalizeLocale, withLocale, type Locale } from "@/i18n/routing";
 import { SelectionBox } from "@/components/selection-box";
 import { getMessageNamespace, t } from "@/lib/translations";
 
-export default function LocalizedOnboardingAssetsPage({ params }: { params: { locale: string } }) {
+export default function LocalizedOnboardingAssetsPage() {
+  const params = useParams<{ locale: string }>();
   const locale = normalizeLocale(params.locale);
   const router = useRouter();
   const copy = getMessageNamespace(locale, "onboarding").assets;

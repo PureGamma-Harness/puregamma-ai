@@ -8,7 +8,8 @@ import { localizedMetadata } from "@/lib/metadata";
 import { getMessageNamespace } from "@/lib/translations";
 import { isLocale, type Locale, withLocale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "admin", "/admin");
 }
@@ -20,7 +21,8 @@ function readState(source: { unavailable?: boolean; unauthorized?: boolean }) {
   return "ok" as const;
 }
 
-export default async function AdminPage({ params }: { params: { locale: Locale } }) {
+export default async function AdminPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const zh = locale === "zh";
   const copy = getMessageNamespace(locale, "admin");

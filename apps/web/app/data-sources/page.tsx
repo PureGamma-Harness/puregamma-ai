@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function DataSourcesRedirect() {
-  redirectToLocalized("/data-sources");
+export default async function DataSourcesRedirect() {
+  return redirectToLocalized("/data-sources");
 }

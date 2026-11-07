@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function GatewayAdministrationRedirect() {
-  redirectToLocalized("/admin/gateway");
+export default async function GatewayAdministrationRedirect() {
+  return redirectToLocalized("/admin/gateway");
 }

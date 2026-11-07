@@ -29,6 +29,18 @@ const nextConfig = (phase) => {
   return {
     reactStrictMode: true,
     output: "standalone",
+    // Sharp loads native packages and version metadata dynamically. Keep
+    // complete package trees so pnpm's relative native-library layout stays
+    // intact and Next can verify libheif before enabling AVIF decoding.
+    // Copying only metadata through a pnpm symlink can shadow that symlink
+    // with an incomplete directory in the standalone output.
+    outputFileTracingIncludes: {
+      "/*": [
+        "./node_modules/.pnpm/sharp@*/node_modules/@img/sharp-*/**/*",
+        "./node_modules/sharp/node_modules/@img/sharp-*/**/*",
+        "./node_modules/@img/sharp-*/**/*"
+      ]
+    },
     // Dev uses .next, builds use .next-build (the Dockerfile copies from there).
     // Deriving it here keeps `next build` scripts portable across shells.
     distDir: process.env.NEXT_DIST_DIR || (isDev ? ".next" : ".next-build"),

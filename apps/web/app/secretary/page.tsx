@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function SecretaryRedirect() {
-  redirectToLocalized("/secretary");
+export default async function SecretaryRedirect() {
+  return redirectToLocalized("/secretary");
 }

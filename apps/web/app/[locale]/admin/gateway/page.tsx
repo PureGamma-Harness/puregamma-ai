@@ -3,7 +3,8 @@ import { GatewayAdminConsole } from "@/components/gateway-admin-console";
 import { PageHeader } from "@/components/puregamma";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const zh = isLocale(params.locale) && params.locale === "zh";
   return {
     title: zh ? "API Gateway 管理 | PureGamma AI" : "API Gateway Administration | PureGamma AI",
@@ -13,7 +14,8 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
   };
 }
 
-export default function GatewayAdministrationPage({ params }: { params: { locale: Locale } }) {
+export default async function GatewayAdministrationPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return (
     <div className="space-y-5">

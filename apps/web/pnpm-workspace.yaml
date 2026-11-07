@@ -1,2 +1,9 @@
 allowBuilds:
   unrs-resolver: true
+
+# GHSA-g3hv-75wg-m249 affects minimatch >=7 <11.0.1.
+# Next ESLint 15 uses fast-glob, so only TypeScript-ESLint still needs an
+# override. Preserve legacy minimatch 3 consumers and remove this override
+# when typescript-estree declares a patched dependency range.
+overrides:
+  "@typescript-eslint/typescript-estree>minimatch": 11.0.5

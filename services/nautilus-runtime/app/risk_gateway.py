@@ -71,7 +71,7 @@ class RuntimeRiskGateway:
     def _aggregate_exposure(
         self, order: dict, policy: dict, account: dict
     ) -> dict:
-        """Aggregate notional across every open paper position of the account.
+        """Aggregate gross notional across the account's open paper positions.
 
         Enforces cumulative limits and an exposure-vs-margin check. Fails
         closed when a margin figure is unavailable but exposure is material.
@@ -80,8 +80,9 @@ class RuntimeRiskGateway:
         position_notional = 0.0
         if self.store is not None:
             for position in self.store.list_paper_positions(order["account_id"]):
-                position_notional += float(position.get("quantity") or 0) * float(
-                    position.get("mark_price", position.get("average_price", 0)) or 0
+                position_notional += abs(
+                    float(position.get("quantity") or 0)
+                    * float(position.get("mark_price", position.get("average_price", 0)) or 0)
                 )
         order_notional = float(order.get("notional") or 0)
         aggregate_after = position_notional + order_notional
