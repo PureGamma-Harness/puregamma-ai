@@ -138,11 +138,20 @@ def upsert_apple_user(db: Session, claims: dict, request: AppleExchangeRequest, 
         db.flush()
         db.add(UserPreference(user_id=user.id, email_recipient=email, notification_channels=["email"]))
     else:
+        was_unverified = not user.email_verified_at
         if _should_update_name(user, name):
             user.name = name
         user.auth_provider = "apple"
         user.email_verified_at = user.email_verified_at or datetime.now(timezone.utc)
         user.last_login_at = datetime.now(timezone.utc)
+        if linked_existing_email and was_unverified:
+            # A local account created before proof of email ownership must not
+            # retain credentials chosen by whoever reserved the address.
+            user.password_hash = None
+            user.password_reset_token = None
+            user.password_reset_token_expires_at = None
+            user.email_verification_token = None
+            user.email_verification_token_expires_at = None
         if not user.preference:
             db.add(UserPreference(user_id=user.id, email_recipient=email, notification_channels=["email"]))
     credential = _credential_store(settings).encrypt(refresh_token, metadata={"provider": "apple", "subject": subject})

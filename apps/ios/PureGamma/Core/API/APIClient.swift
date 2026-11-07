@@ -18,7 +18,7 @@ final class APIClient: @unchecked Sendable {
         self.configuration = configuration; self.tokenStore = tokenStore; self.session = session
     }
 
-    func request<Response: Decodable, Body: Encodable>(_ path: String, method: String = "GET", body: Body? = Optional<EmptyBody>.none, query: [URLQueryItem] = [], resetsSessionOnUnauthorized: Bool = true) async throws -> Response {
+    func request<Response: Decodable, Body: Encodable>(_ path: String, method: String = "GET", body: Body? = Optional<EmptyBody>.none, query: [URLQueryItem] = [], resetsSessionOnUnauthorized: Bool = true, preferredErrorCodes: Set<String> = []) async throws -> Response {
         var components = URLComponents(url: configuration.baseURL.appending(path: path), resolvingAgainstBaseURL: false)
         components?.queryItems = query.isEmpty ? nil : query
         guard let url = components?.url else { throw APIError.invalidRequest }
@@ -32,7 +32,7 @@ final class APIClient: @unchecked Sendable {
         while true {
             do {
                 let (data, response) = try await session.data(for: request)
-                try validate(response, data: data, resetsSessionOnUnauthorized: resetsSessionOnUnauthorized)
+                try validate(response, data: data, resetsSessionOnUnauthorized: resetsSessionOnUnauthorized, preferredErrorCodes: preferredErrorCodes)
                 do { return try JSONDecoder.pg.decode(Response.self, from: data) }
                 catch { throw APIError.decoding(error.localizedDescription) }
             } catch is CancellationError { throw APIError.canceled }
@@ -90,11 +90,13 @@ final class APIClient: @unchecked Sendable {
         catch { throw APIError.transport(error.localizedDescription) }
     }
 
-    private func validate(_ response: URLResponse, data: Data, resetsSessionOnUnauthorized: Bool = true) throws {
+    private func validate(_ response: URLResponse, data: Data, resetsSessionOnUnauthorized: Bool = true, preferredErrorCodes: Set<String> = []) throws {
         guard let http = response as? HTTPURLResponse else { throw APIError.transport("Non-HTTP response") }
         guard !(200..<300).contains(http.statusCode) else { return }
         let payload = (try? JSONDecoder().decode(ErrorEnvelope.self, from: data))
-        let message = payload?.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+        let code = (try? JSONDecoder().decode(CodedErrorEnvelope.self, from: data))?.detail.code
+        let message = code.flatMap { preferredErrorCodes.contains($0) ? $0 : nil }
+            ?? payload?.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
         switch http.statusCode {
         case 401:
             guard resetsSessionOnUnauthorized else { throw APIError.server(status: 401, message: message) }
@@ -146,6 +148,13 @@ extension APIError {
 }
 
 private struct EmptyBody: Encodable {}
+
+/// Callers can retain a known error code for local presentation without
+/// changing the usual server-message handling for other errors.
+private struct CodedErrorEnvelope: Decodable {
+    struct Detail: Decodable { let code: String }
+    let detail: Detail
+}
 
 /// Lenient scalar used so error envelopes with non-string metadata still decode.
 /// `{"code": "INSUFFICIENT_CREDITS", "required": 8}` or FastAPI's validation

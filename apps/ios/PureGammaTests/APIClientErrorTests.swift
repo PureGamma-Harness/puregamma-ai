@@ -35,13 +35,13 @@ private final class MemoryTokenStore: TokenStoring, @unchecked Sendable {
 
 @Suite(.serialized)
 @MainActor struct APIClientErrorTests {
-    private func makeClient() -> APIClient {
+    private func makeClient(tokenStore: TokenStoring = MemoryTokenStore()) -> APIClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: configuration)
         return APIClient(
             configuration: APIConfiguration(baseURL: URL(string: "https://api.example.com")!, environment: "test"),
-            tokenStore: MemoryTokenStore(),
+            tokenStore: tokenStore,
             session: session
         )
     }
@@ -113,6 +113,17 @@ private final class MemoryTokenStore: TokenStoring, @unchecked Sendable {
         } catch { Issue.record("Unexpected error: \(error)") }
     }
 
+    @Test func unavailableStillPrefersServerMessageByDefault() async {
+        let client = makeClient()
+        stub(status: 503, body: #"{"detail":{"code":"SERVICE_UNAVAILABLE","message":"Please try again later"}}"#)
+        do {
+            let _: EmptyResponseDTO = try await client.request("/billing/checkout", method: "POST", body: ["plan": "pro"])
+            Issue.record("Expected unavailable")
+        } catch let error as APIError {
+            #expect(error == .unavailable("Please try again later"))
+        } catch { Issue.record("Unexpected error: \(error)") }
+    }
+
     @Test func validationErrorsSurfaceFastAPIMessage() async {
         let client = makeClient()
         stub(status: 422, body: #"[{"loc":["body","prompt"],"msg":"field required"}]"#)
@@ -152,5 +163,66 @@ private final class MemoryTokenStore: TokenStoring, @unchecked Sendable {
             guard case .transport = error else { Issue.record("Wrong error: \(error)"); return }
             #expect(calls == 1)
         } catch { Issue.record("Unexpected error: \(error)") }
+    }
+
+    @Test(arguments: [true, false])
+    func emailRegistrationRemainsSignedOut(emailSent: Bool) async throws {
+        let tokens = MemoryTokenStore()
+        let authentication = AuthenticationService(client: makeClient(tokenStore: tokens), tokenStore: tokens)
+        stub(status: 202, body: """
+        {"email_sent": \(emailSent), "verification_required": true}
+        """)
+
+        let result = try await authentication.registerWithEmail(email: "pending@example.com", password: "TestPassword123", name: "Pending")
+
+        #expect(result.emailSent == emailSent)
+        #expect(result.verificationRequired)
+        #expect(tokens.read() == nil)
+        #expect(!authentication.hasToken)
+        #expect(!authentication.isSigningIn)
+    }
+
+    @Test func emailRegistrationFailureDoesNotCreateSession() async {
+        let tokens = MemoryTokenStore()
+        let authentication = AuthenticationService(client: makeClient(tokenStore: tokens), tokenStore: tokens)
+        stub(status: 503, body: #"{"detail":{"code":"VERIFICATION_EMAIL_FAILED","message":"Account not created. Verification email could not be sent. Please try again."}}"#)
+
+        do {
+            _ = try await authentication.registerWithEmail(email: "pending@example.com", password: "TestPassword123", name: "Pending")
+            Issue.record("Expected verification email failure")
+        } catch let error as APIError {
+            #expect(error == .unavailable("VERIFICATION_EMAIL_FAILED"))
+        } catch { Issue.record("Unexpected error: \(error)") }
+
+        #expect(tokens.read() == nil)
+        #expect(!authentication.isSigningIn)
+    }
+
+    @Test func emailRegistrationRejectsResponseWithoutVerification() async {
+        let tokens = MemoryTokenStore()
+        let authentication = AuthenticationService(client: makeClient(tokenStore: tokens), tokenStore: tokens)
+        stub(status: 202, body: #"{"email_sent":true,"verification_required":false,"access_token":"unexpected-token"}"#)
+
+        do {
+            _ = try await authentication.registerWithEmail(email: "pending@example.com", password: "TestPassword123", name: "Pending")
+            Issue.record("Expected a pending verification response")
+        } catch let error as APIError {
+            guard case .decoding = error else { Issue.record("Wrong error: \(error)"); return }
+        } catch { Issue.record("Unexpected error: \(error)") }
+
+        #expect(tokens.read() == nil)
+        #expect(!authentication.isSigningIn)
+    }
+
+    @Test func emailLoginStillStoresVerifiedSession() async throws {
+        let tokens = MemoryTokenStore()
+        let authentication = AuthenticationService(client: makeClient(tokenStore: tokens), tokenStore: tokens)
+        stub(status: 200, body: #"{"access_token":"verified-token","user":{"id":"verified-user","email":"verified@example.com","name":"Verified","role":"user","plan":"Free","credit_balance":30}}"#)
+
+        let user = try await authentication.signInWithEmail(email: "verified@example.com", password: "TestPassword123")
+
+        #expect(user.id == "verified-user")
+        #expect(tokens.read() == "verified-token")
+        #expect(authentication.hasToken)
     }
 }

@@ -61,17 +61,18 @@ final class AuthenticationService: NSObject, ASWebAuthenticationPresentationCont
         return response.user.domain
     }
 
-    func registerWithEmail(email: String, password: String, name: String) async throws -> User {
+    func registerWithEmail(email: String, password: String, name: String) async throws -> MobileEmailRegistrationResponseDTO {
         isSigningIn = true; defer { isSigningIn = false }
         let locale = Locale.current.language.languageCode?.identifier ?? "en"
-        let response: MobileOAuthExchangeResponseDTO = try await client.request(
+        let response: MobileEmailRegistrationResponseDTO = try await client.request(
             "/auth/mobile/email/register",
             method: "POST",
             body: MobileEmailRegisterDTO(email: email, password: password, name: name, locale: locale),
-            resetsSessionOnUnauthorized: false
+            resetsSessionOnUnauthorized: false,
+            preferredErrorCodes: ["VERIFICATION_EMAIL_FAILED"]
         )
-        try tokenStore.save(response.accessToken)
-        return response.user.domain
+        guard response.verificationRequired else { throw APIError.decoding("Email verification is required") }
+        return response
     }
 
     func completeAppleSignIn(credential: ASAuthorizationAppleIDCredential, rawNonce: String) async throws -> User {

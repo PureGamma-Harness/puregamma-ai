@@ -4,6 +4,68 @@ from packages.database.models import User, UserIdentity
 from tests.conftest import auth_headers
 
 
+def test_apple_link_discards_unverified_local_credentials(api_client, db, user_factory, monkeypatch):
+    from apps.api.dependencies import create_access_token
+    from packages.database.models import utcnow
+    from packages.security.passwords import hash_password
+
+    settings = apple_settings()
+    user = user_factory("apple-preclaimed@example.com")
+    user.password_hash = hash_password("AttackerPassword7")
+    user.password_reset_token = "old-reset-digest"
+    user.password_reset_token_expires_at = utcnow()
+    user.email_verification_token = "old-verification-digest"
+    user.email_verification_token_expires_at = utcnow()
+    db.commit()
+    old_token = create_access_token(user)
+    monkeypatch.setattr(apple_auth, "get_settings", lambda: settings)
+    monkeypatch.setattr(apple_auth, "_verify_apple_identity_token", lambda *args: {
+        "sub": "apple-verified-owner", "email": user.email, "email_verified": True,
+    })
+    monkeypatch.setattr(apple_auth, "_exchange_authorization_code", lambda *args: {
+        "id_token": "exchanged-token", "refresh_token": "server-refresh-token",
+    })
+
+    response = api_client.post("/auth/mobile/apple/exchange", json={
+        "identity_token": "x" * 80, "authorization_code": "apple-code", "nonce": "n" * 40,
+    })
+
+    assert response.status_code == 200
+    db.refresh(user)
+    assert user.email_verified_at is not None
+    assert user.password_hash is None
+    assert user.password_reset_token is None
+    assert user.password_reset_token_expires_at is None
+    assert user.email_verification_token is None
+    assert user.email_verification_token_expires_at is None
+    assert api_client.get("/me", headers={"Authorization": f"Bearer {old_token}"}).status_code == 401
+    login = api_client.post("/auth/mobile/email/login", json={
+        "email": user.email, "password": "AttackerPassword7",
+    })
+    assert login.status_code == 401
+
+
+def test_apple_link_preserves_verified_local_password(db, user_factory):
+    from packages.database.models import utcnow
+    from packages.security.passwords import hash_password
+
+    settings = apple_settings()
+    user = user_factory("apple-established@example.com")
+    user.email_verified_at = utcnow()
+    user.password_hash = hash_password("OwnerPassword7")
+    old_hash = user.password_hash
+    db.commit()
+
+    linked = apple_auth.upsert_apple_user(db, {
+        "sub": "apple-established-owner", "email": user.email, "email_verified": True,
+    }, apple_auth.AppleExchangeRequest(
+        identity_token="x" * 80, authorization_code="apple-code", nonce="n" * 40,
+    ), "server-refresh-token", settings)
+
+    assert linked.id == user.id
+    assert linked.password_hash == old_hash
+
+
 def apple_settings() -> Settings:
     return Settings(
         apple_auth_enabled=True,

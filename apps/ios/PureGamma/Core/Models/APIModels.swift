@@ -9,6 +9,13 @@ struct MobileOAuthExchangeDTO: Encodable { let code, codeVerifier, nonce: String
 struct MobileOAuthExchangeResponseDTO: Decodable { let accessToken: String; let user: UserDTO; enum CodingKeys: String, CodingKey { case user; case accessToken = "access_token" } }
 struct MobileEmailLoginDTO: Encodable { let email, password: String }
 struct MobileEmailRegisterDTO: Encodable { let email, password, name, locale: String }
+struct MobileEmailRegistrationResponseDTO: Decodable {
+    let emailSent, verificationRequired: Bool
+    enum CodingKeys: String, CodingKey {
+        case emailSent = "email_sent"
+        case verificationRequired = "verification_required"
+    }
+}
 struct AppleOAuthExchangeDTO: Encodable {
     let identityToken, authorizationCode, nonce: String
     let givenName, familyName: String?

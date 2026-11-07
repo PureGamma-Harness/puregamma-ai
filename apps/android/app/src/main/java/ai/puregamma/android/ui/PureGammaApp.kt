@@ -177,6 +177,13 @@ private fun LoginScreen(model: AppViewModel, openBrowser: (Uri) -> Unit) {
     var name by remember { mutableStateOf("") }
     var showRegister by remember { mutableStateOf(false) }
 
+    LaunchedEffect(model.emailVerificationPending) {
+        if (model.emailVerificationPending) {
+            showRegister = false
+            password = ""
+        }
+    }
+
     Box(Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState())) {
         Column(
             Modifier.align(Alignment.Center).widthIn(max = 420.dp).fillMaxWidth(),
@@ -205,6 +212,9 @@ private fun LoginScreen(model: AppViewModel, openBrowser: (Uri) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 model.globalError?.let { InlineError(it, model::clearError) }
+                if (model.emailVerificationPending) {
+                    Text(stringResource(R.string.email_verification_sent), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                }
 
                 OutlinedTextField(
                     value = email,
@@ -287,6 +297,7 @@ private fun LoginScreen(model: AppViewModel, openBrowser: (Uri) -> Unit) {
                 onClick = {
                     showRegister = !showRegister
                     model.clearError()
+                    model.clearEmailVerificationNotice()
                 },
                 enabled = !model.signingIn,
             ) {

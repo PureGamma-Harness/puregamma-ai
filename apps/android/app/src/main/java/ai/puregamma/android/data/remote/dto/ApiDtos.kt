@@ -28,6 +28,11 @@ data class EmailRegisterRequest(
     val locale: String,
 )
 
+data class EmailRegistrationResponseDto(
+    @SerializedName("email_sent") val emailSent: Boolean? = null,
+    @SerializedName("verification_required") val verificationRequired: Boolean? = null,
+)
+
 data class AuthResponseDto(
     @SerializedName("access_token") val accessToken: String,
     val user: UserDto,

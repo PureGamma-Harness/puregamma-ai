@@ -76,4 +76,7 @@
     <string name="live_trading_disabled_caption">本应用永久禁用 — 无下单能力</string>
     <string name="connect_plaid">连接 Plaid</string>
     <string name="plaid_connect_hint">连接券商、退休金与投资账户（只读）。</string>
+    <string name="email_verification_sent">请检查收件箱并验证邮箱，然后在这里登录。</string>
+    <string name="error_verification_email_not_sent">账号仍需验证邮箱，但验证邮件暂时无法发送。请稍后重试。</string>
+    <string name="error_registration_unavailable">暂时无法完成注册，请稍后重试。</string>
 </resources>
