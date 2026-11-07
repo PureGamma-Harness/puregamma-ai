@@ -113,6 +113,10 @@ def upsert_google_user(db: Session, payload: dict) -> User:
         user.last_login_at = datetime.now(timezone.utc)
         if linked_existing_email and was_unverified:
             user.password_hash = None
+            user.password_reset_token = None
+            user.password_reset_token_expires_at = None
+            user.email_verification_token = None
+            user.email_verification_token_expires_at = None
         if not user.preference:
             db.add(UserPreference(user_id=user.id, email_recipient=email, notification_channels=["email"]))
     if not identity:

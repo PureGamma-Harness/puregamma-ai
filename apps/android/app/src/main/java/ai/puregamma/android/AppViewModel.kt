@@ -71,6 +71,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var globalError: String? by mutableStateOf(null)
         private set
+    var emailVerificationPending by mutableStateOf(false)
+        private set
     var signingIn by mutableStateOf(false)
         private set
     var isRegistering by mutableStateOf(false)
@@ -202,16 +204,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun emailRegister(email: String, password: String, name: String) = viewModelScope.launch {
         signingIn = true
         globalError = null
+        emailVerificationPending = false
         try {
             val response = api.emailRegister(
                 EmailRegisterRequest(email.trim(), password, name.trim(), language),
             )
-            tokenStore.save(response.accessToken)
-            val dto = response.user
-            session = SessionState.SignedIn(
-                User(dto.id, dto.email, dto.name, dto.role, dto.plan, dto.membershipTier, dto.creditBalance, dto.avatarUrl),
-            )
-            loadAll()
+            check(response.verificationRequired == true) {
+                getApplication<Application>().getString(R.string.error_registration_unavailable)
+            }
+            check(response.emailSent == true) {
+                getApplication<Application>().getString(R.string.error_verification_email_not_sent)
+            }
+            emailVerificationPending = true
         } catch (e: Exception) {
             globalError = resolveError(e, "Unable to create account")
         }
@@ -449,6 +453,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() {
         globalError = null
+    }
+
+    fun clearEmailVerificationNotice() {
+        emailVerificationPending = false
     }
 
     fun setModel(modelId: String?) {

@@ -167,6 +167,9 @@
 "New here? Create an account" = "新用户？创建账户";
 "Incorrect email or password." = "邮箱或密码错误。";
 "This email is not verified yet. Check your inbox for the verification link." = "此邮箱尚未验证，请查收收件箱中的验证邮件。";
+"Check your inbox and verify your email, then sign in." = "请查收邮件并验证邮箱，然后登录。";
+"Verification email could not be sent. Your account still needs verification before sign in." = "验证邮件未能发送，账户仍需完成邮箱验证后才能登录。";
+"Verification email could not be sent. Please try creating your account again later." = "验证邮件未能发送，请稍后重新创建账户。";
 "An account with this email already exists. Sign in instead." = "该邮箱已注册，请直接登录。";
 "Password must be at least 8 characters with a letter, a digit and an uppercase letter." = "密码至少 8 位，需包含字母、数字和大写字母。";
 "Enter a valid email address." = "请输入有效的邮箱地址。";

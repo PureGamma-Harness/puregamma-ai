@@ -45,6 +45,9 @@
 "New here? Create an account" = "New here? Create an account";
 "Incorrect email or password." = "Incorrect email or password.";
 "This email is not verified yet. Check your inbox for the verification link." = "This email is not verified yet. Check your inbox for the verification link.";
+"Check your inbox and verify your email, then sign in." = "Check your inbox and verify your email, then sign in.";
+"Verification email could not be sent. Your account still needs verification before sign in." = "Verification email could not be sent. Your account still needs verification before sign in.";
+"Verification email could not be sent. Please try creating your account again later." = "Verification email could not be sent. Please try creating your account again later.";
 "An account with this email already exists. Sign in instead." = "An account with this email already exists. Sign in instead.";
 "Password must be at least 8 characters with a letter, a digit and an uppercase letter." = "Password must be at least 8 characters with a letter, a digit and an uppercase letter.";
 "Enter a valid email address." = "Enter a valid email address.";

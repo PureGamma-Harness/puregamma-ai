@@ -21,6 +21,35 @@
   - `404/501`（新功能接口） → 移动端显示"功能暂不可用"，不得用假数据
 - 所有状态以服务端返回为准；移动端缓存只用于展示，不用于资格/额度/交易判断。
 
+### 0.1 邮箱注册与登录会话
+
+`POST /auth/mobile/email/register` 接受 `email`、`password`、`name`、`locale`，
+成功创建待验证账号时返回 **202**：
+
+```json
+{
+  "user": {"id": "...", "email": "user@example.com", "email_verified": false},
+  "verification_required": true,
+  "email_sent": true,
+  "message": "Verification email sent"
+}
+```
+
+`user` 沿用完整用户对象，上例只列相关字段。注册响应不包含 `access_token`，
+客户端不得保存登录凭证或将注册视为已登录；应提示用户检查邮箱并返回登录界面。
+邮箱链接通过现有 `POST /auth/email/verify` 完成验证后，用户可调用
+`POST /auth/mobile/email/login`，成功响应仍为 `200`，包含
+`access_token`、`token_type`、`expires_in`、`user`。
+未验证邮箱登录返回 `403 EMAIL_NOT_VERIFIED`。
+
+生产环境验证邮件发送失败返回 `503 VERIFICATION_EMAIL_FAILED`，且不创建账号，
+客户端可提示稍后重试；开发环境可能返回 `202`、`email_sent: false`，仍须验证，
+不得视为登录成功。
+
+`POST /auth/mobile/web-session` 返回的 `handoff_path` 是短时、单次使用的会话交接链接，
+客户端应将其中的 code 作为不透明值原样使用。退出登录或重置密码后，之前签发的
+交接链接失效，消费返回 `400 MOBILE_WEB_SESSION_INVALID`，不得恢复旧会话。
+
 ## 1. 能力发现（所有功能的总开关）
 
 ### `GET /api/mobile/capabilities`

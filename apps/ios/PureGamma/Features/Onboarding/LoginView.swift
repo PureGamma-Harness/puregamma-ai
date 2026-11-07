@@ -4,6 +4,7 @@ import SwiftUI
 struct LoginView: View {
     @Environment(AppState.self) private var app
     @State private var error: String?
+    @State private var registrationNotice: String?
     @State private var appleNonce = ""
     @State private var email = ""
     @State private var password = ""
@@ -25,6 +26,7 @@ struct LoginView: View {
             Text("Market intelligence,\nwith clear boundaries.").font(.largeTitle.weight(.semibold)).tracking(-1)
             Text("Research, options and portfolio context for secondary-market investors.").foregroundStyle(.secondary)
             if let error { Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(PGTheme.negative) }
+            if let registrationNotice { Label(registrationNotice, systemImage: "envelope").font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("email-verification-notice") }
             VStack(alignment: .leading, spacing: 10) {
                 Text(isRegistering ? "Create account" : "Email sign in").font(.headline)
                 TextField("Email", text: $email)
@@ -86,13 +88,23 @@ struct LoginView: View {
     }
 
     private func submitEmailForm() {
+        guard !app.authentication.isSigningIn else { return }
         error = nil
+        registrationNotice = nil
+        let registering = isRegistering
         Task {
             do {
-                let user = try isRegistering
-                    ? await app.authentication.registerWithEmail(email: email, password: password, name: displayName)
-                    : await app.authentication.signInWithEmail(email: email, password: password)
-                app.completeLogin(user)
+                if registering {
+                    let response = try await app.authentication.registerWithEmail(email: email, password: password, name: displayName)
+                    registrationNotice = response.emailSent
+                        ? String(localized: "Check your inbox and verify your email, then sign in.")
+                        : String(localized: "Verification email could not be sent. Your account still needs verification before sign in.")
+                    isRegistering = false
+                    password = ""
+                    focusedField = nil
+                } else {
+                    app.completeLogin(try await app.authentication.signInWithEmail(email: email, password: password))
+                }
             } catch APIError.canceled { error = nil }
             catch { self.error = emailErrorMessage(error) }
         }
@@ -102,6 +114,7 @@ struct LoginView: View {
         switch error.localizedDescription {
         case "INVALID_CREDENTIALS": String(localized: "Incorrect email or password.")
         case "EMAIL_NOT_VERIFIED": String(localized: "This email is not verified yet. Check your inbox for the verification link.")
+        case "VERIFICATION_EMAIL_FAILED": String(localized: "Verification email could not be sent. Please try creating your account again later.")
         case "EMAIL_ALREADY_REGISTERED": String(localized: "An account with this email already exists. Sign in instead.")
         case "PASSWORD_TOO_WEAK": String(localized: "Password must be at least 8 characters with a letter, a digit and an uppercase letter.")
         case "INVALID_EMAIL": String(localized: "Enter a valid email address.")

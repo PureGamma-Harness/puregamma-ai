@@ -1,0 +1,166 @@
+name: Mobile authentication regression
+
+on:
+  push:
+    branches: [main, refactor/harness-core-v2]
+    paths:
+      - 'apps/android/**'
+      - 'apps/ios/**'
+      - 'apps/api/routers/*auth*.py'
+      - 'apps/api/config.py'
+      - 'apps/api/dependencies.py'
+      - 'packages/security/**'
+      - 'tests/test_mobile_auth.py'
+      - 'tests/test_apple_auth_and_account_deletion.py'
+      - '.github/workflows/mobile-auth-regression.yml'
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'apps/ios/**'
+      - 'apps/api/routers/*auth*.py'
+      - 'apps/api/config.py'
+      - 'apps/api/dependencies.py'
+      - 'packages/security/**'
+      - 'tests/test_mobile_auth.py'
+      - 'tests/test_apple_auth_and_account_deletion.py'
+      - '.github/workflows/mobile-auth-regression.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-auth-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            apps/android/**/*.gradle.kts
+            apps/android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Install project SDK and build tools
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+
+      - name: Run Android unit tests
+        working-directory: apps/android
+        run: bash ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+  ios:
+    name: iOS unit tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Select installed Xcode 26 or newer
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import plistlib
+          import re
+
+          candidates = []
+          for app in pathlib.Path('/Applications').glob('Xcode*.app'):
+              info = app / 'Contents/Info.plist'
+              if not info.is_file():
+                  continue
+              with info.open('rb') as handle:
+                  version = plistlib.load(handle)['CFBundleShortVersionString']
+              numbers = tuple(int(part) for part in re.findall(r'\d+', version))
+              if numbers and numbers[0] >= 26:
+                  candidates.append((numbers, app))
+          if not candidates:
+              raise SystemExit('This project requires an installed Xcode 26 or newer.')
+          version, app = max(candidates, key=lambda candidate: candidate[0])
+          with open(os.environ['GITHUB_ENV'], 'a') as handle:
+              handle.write(f'DEVELOPER_DIR={app}/Contents/Developer\n')
+          print(f'Selected {app} (version {version})')
+          PY
+
+      - name: Select an available iPhone simulator
+        id: simulator
+        shell: bash
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/mobile-simulators.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+
+          data = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'mobile-simulators.json').read_text())
+          candidates = []
+          for runtime, devices in data['devices'].items():
+              match = re.search(r'\.iOS-(\d+)-(\d+)(?:-(\d+))?$', runtime)
+              if not match:
+                  continue
+              version = tuple(int(part or 0) for part in match.groups())
+              if version[0] < 17:
+                  continue
+              for device in devices:
+                  if device.get('isAvailable') and device['name'].startswith('iPhone'):
+                      candidates.append((version, device['name'], device['udid']))
+          if not candidates:
+              raise SystemExit('No available iPhone simulator with iOS 17 or newer.')
+          version, name, udid = max(candidates)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:
+              handle.write(f'udid={udid}\n')
+          print(f'Selected {name}, iOS {version}, {udid}')
+          PY
+
+      - name: Run iOS unit tests with local simulator signing
+        working-directory: apps/ios
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcodebuild test \
+            -project PureGamma.xcodeproj \
+            -scheme PureGamma \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -destination-timeout 120 \
+            -derivedDataPath "$RUNNER_TEMP/puregamma-ios-tests" \
+            -only-testing:PureGammaTests \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO SWIFT_VERSION=5.0
+
+      - name: Inspect simulator test host entitlements
+        if: always()
+        run: |
+          # Local ad-hoc signing needs no developer certificate or secrets,
+          # and preserves the entitlements used by the Keychain tests.
+          app="$RUNNER_TEMP/puregamma-ios-tests/Build/Products/Debug-iphonesimulator/PureGamma.app"
+          if [ -d "$app" ]; then
+            codesign --display --verbose=2 "$app"
+            codesign --display --entitlements - "$app"
+          fi

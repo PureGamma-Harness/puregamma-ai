@@ -76,4 +76,7 @@
     <string name="live_trading_disabled_caption">Permanently disabled in this app — no order entry</string>
     <string name="connect_plaid">Connect Plaid</string>
     <string name="plaid_connect_hint">Connect brokerage, retirement, and investment accounts (read-only).</string>
+    <string name="email_verification_sent">Check your inbox to verify your email, then sign in here.</string>
+    <string name="error_verification_email_not_sent">Your account still needs email verification, but the email could not be sent. Please try again later.</string>
+    <string name="error_registration_unavailable">Unable to complete registration. Please try again later.</string>
 </resources>

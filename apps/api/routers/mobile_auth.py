@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 from datetime import timedelta, timezone
@@ -15,13 +16,14 @@ from apps.api.config import get_settings
 from apps.api.dependencies import create_access_token, get_current_user, get_db, set_session_cookie
 from apps.api.i18n import normalize_locale
 from apps.api.routers.auth import serialize_user
-from apps.api.routers.email_auth import _email_rate_limit
+from apps.api.routers.email_auth import _email_rate_limit, _send_verification_email
 from apps.api.routers.google_auth import GOOGLE_AUTHORIZE_URL, _challenge, _exchange_code_for_token, _verify_google_id_token, upsert_google_user
 from packages.database.models import MobileOAuthSession, MobileWebSession, User, UserPreference, utcnow
 from packages.security.passwords import hash_password, verify_password
 
 
 router = APIRouter(prefix="/auth/mobile", tags=["auth"])
+logger = logging.getLogger("puregamma.mobile_auth")
 SESSION_TTL_SECONDS = 600
 TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 WEB_SESSION_TTL_SECONDS = 60
@@ -126,7 +128,9 @@ def mobile_google_exchange(payload: MobileOAuthExchange, db: Session = Depends(g
         raise HTTPException(status_code=400, detail={"code": "MOBILE_OAUTH_USER_MISSING"})
     row.consumed_at = utcnow()
     row.exchange_code_hash = None
+    user.session_version = int(user.session_version or 0) + 1
     db.commit()
+    db.refresh(user)
     return {"access_token": create_access_token(user, TOKEN_TTL_SECONDS), "token_type": "bearer", "expires_in": TOKEN_TTL_SECONDS, "user": serialize_user(user)}
 
 
@@ -137,7 +141,9 @@ def create_mobile_web_session(
     user: User = Depends(get_current_user),
 ) -> dict:
     """Exchange an Android Bearer token for a short-lived, one-time web cookie handoff."""
-    code = secrets.token_urlsafe(48)
+    # Bind the handoff to the login session that authorized it. The complete
+    # opaque value is hashed in storage; no schema change is needed.
+    code = f"{secrets.token_urlsafe(48)}.{int(user.session_version or 0)}"
     db.query(MobileWebSession).filter(MobileWebSession.expires_at < utcnow()).delete(synchronize_session=False)
     row = MobileWebSession(
         code_hash=_hash(code),
@@ -163,6 +169,9 @@ def consume_mobile_web_session(code: str, db: Session = Depends(get_db)):
     user = db.get(User, row.user_id)
     if not user:
         raise HTTPException(status_code=400, detail={"code": "MOBILE_WEB_SESSION_USER_MISSING"})
+    _, separator, issued_version = code.rpartition(".")
+    if not separator or issued_version != str(int(user.session_version or 0)):
+        raise HTTPException(status_code=400, detail={"code": "MOBILE_WEB_SESSION_INVALID"})
     row.consumed_at = utcnow()
     response = RedirectResponse(f"{get_settings().site_url}/{row.locale}/dashboard", status_code=302)
     set_session_cookie(response, user)
@@ -256,7 +265,7 @@ def mobile_email_login(
     }
 
 
-@router.post("/email/register")
+@router.post("/email/register", status_code=202)
 def mobile_email_register(
     payload: MobileEmailRegisterRequest,
     request: Request,
@@ -288,7 +297,6 @@ def mobile_email_register(
         credit_balance=150,
         auth_provider="email",
         password_hash=pw_hash,
-        email_verified_at=utcnow(),
     )
     db.add(user)
     db.flush()
@@ -296,14 +304,25 @@ def mobile_email_register(
     if not user.preference:
         db.add(UserPreference(user_id=user.id, email_recipient=email, locale=locale))
 
-    user.last_login_at = utcnow()
-    user.session_version = int(user.session_version or 0) + 1
+    email_sent = True
+    try:
+        _send_verification_email(user)
+    except Exception as exc:
+        email_sent = False
+        if get_settings().app_environment.lower() == "production":
+            db.rollback()
+            logger.error("mobile_email_verification_send_failed", extra={"error": type(exc).__name__})
+            raise HTTPException(status_code=503, detail={
+                "code": "VERIFICATION_EMAIL_FAILED",
+                "message": "Account not created. Verification email could not be sent. Please try again.",
+            }) from exc
+        logger.warning("mobile_email_verification_send_failed", extra={"error": type(exc).__name__})
     db.commit()
     db.refresh(user)
 
     return {
-        "access_token": create_access_token(user, TOKEN_TTL_SECONDS),
-        "token_type": "bearer",
-        "expires_in": TOKEN_TTL_SECONDS,
         "user": serialize_user(user),
+        "verification_required": True,
+        "email_sent": email_sent,
+        "message": "Verification email sent" if email_sent else "Account created but verification email could not be sent",
     }
