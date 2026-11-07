@@ -93,6 +93,18 @@ def test_proxy_requires_pin(client, upstream_requests):
     assert len(upstream_requests) == 1
 
 
+@pytest.mark.parametrize("host", [
+    f"{PUBLIC_HOST}/health?",
+    f"{PUBLIC_HOST}/_pocket#",
+])
+def test_malformed_host_cannot_hide_private_path_from_pin_gate(client, upstream_requests, host):
+    response = client.get("/private/report", headers={"host": host})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "PIN required"}
+    assert upstream_requests == []
+
+
 def test_pin_rotate_and_custom(client, monkeypatch):
     before = client.get("/rpc/status", headers=H).json()["public"]["pin"]
     replacement = "87654321" if before != "87654321" else "11223344"
