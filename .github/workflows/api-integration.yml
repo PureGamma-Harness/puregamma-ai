@@ -1,0 +1,64 @@
+name: API integration
+
+on:
+  push:
+    branches: [main, refactor/harness-core-v2]
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'services/nautilus-runtime/**'
+      - 'tests/**'
+      - 'pytest.ini'
+      - '.github/workflows/api-integration.yml'
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'services/nautilus-runtime/**'
+      - 'tests/**'
+      - 'pytest.ini'
+      - '.github/workflows/api-integration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authenticated-observation-and-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      ENABLE_MOCK_MARKET_DATA: 'true'
+      LIVE_TRADING_ENABLED: 'false'
+      LIVE_TRADING_DEPLOYMENT_APPROVED: 'false'
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+
+      - name: Install production API and test dependencies
+        run: python -m pip install -r apps/api/requirements.txt
+
+      - name: Run authenticated observation and runtime regression tests
+        run: |
+          python -m pytest -q -rx \
+            tests/integration/test_harness_trading_read_boundary.py \
+            tests/integration/test_execution_chain.py \
+            tests/integration/test_nautilus_api.py \
+            tests/unit/test_runtime_*.py \
+            tests/test_nautilus_runtime_control.py \
+            tests/test_auth.py \
+            tests/test_mobile*.py \
+            tests/test_apple_auth_and_account_deletion.py
