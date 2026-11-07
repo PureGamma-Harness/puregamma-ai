@@ -89,5 +89,5 @@ test("keeps launch claims and metadata aligned with the current product", async 
   assert.doesNotMatch(page, /guaranteed return|保证收益|codex-preview|SkeletonPreview/i);
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /summary_large_image/);
-  assert.match(packageJson, /"test": "npm run build && node --test tests\/rendered-html\.test\.mjs"/);
+  assert.match(packageJson, /"test": "npm run build && node --test tests\/\*\.test\.mjs"/);
 });
