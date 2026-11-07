@@ -3,6 +3,9 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from threading import RLock
+
+from app.order_safety import reduce_only_rejection
 
 
 class ExchangeGateway(ABC):
@@ -25,6 +28,9 @@ class ExchangeGateway(ABC):
 class MockExchangeGateway(ExchangeGateway):
     def __init__(self, store=None):
         self.store = store
+        self._locks_guard = RLock()
+        self._positions_guard = RLock()
+        self._account_locks: dict[str, RLock] = {}
         self.orders: dict[str, dict] = {
             order["client_order_id"]: order
             for order in (store.latest_orders() if store else [])
@@ -33,6 +39,46 @@ class MockExchangeGateway(ExchangeGateway):
             (position["account_id"], position["instrument"]): position
             for position in (store.list_paper_positions() if store else [])
         }
+
+    def _submission_lock(self, account_id: str):
+        shared_lock = getattr(self.store, "account_lock", None)
+        if shared_lock is not None:
+            return shared_lock(account_id)
+        with self._locks_guard:
+            if account_id not in self._account_locks:
+                self._account_locks[account_id] = RLock()
+            return self._account_locks[account_id]
+
+    def _refresh_positions(self, account_id: str) -> None:
+        if self.store is None:
+            return
+        current = {
+            (position["account_id"], position["instrument"]): position
+            for position in self.store.list_paper_positions(account_id)
+        }
+        with self._positions_guard:
+            for key in list(self.positions):
+                if key[0] == account_id:
+                    del self.positions[key]
+            self.positions.update(current)
+
+    def _reject_invalid_reduction(self, order: dict) -> dict | None:
+        if not order.get("reduce_only"):
+            return None
+        reason = reduce_only_rejection(order, self.fetch_positions(order["account_id"]))
+        if reason is None:
+            return None
+        rejected = {
+            **order,
+            "exchange_order_id": None,
+            "state": "REJECTED",
+            "filled_quantity": 0.0,
+            "remaining_quantity": order["quantity"],
+            "average_price": None,
+            "error": reason,
+        }
+        self.orders[order["client_order_id"]] = rejected
+        return rejected
 
     def connect(self) -> dict:
         return self.health_check()
@@ -71,9 +117,13 @@ class MockExchangeGateway(ExchangeGateway):
         }
 
     def fetch_positions(self, account_id: str) -> list[dict]:
-        return [
-            value for (owner, _), value in self.positions.items() if owner == account_id
-        ]
+        with self._submission_lock(account_id):
+            self._refresh_positions(account_id)
+            with self._positions_guard:
+                return [
+                    dict(value) for (owner, _), value in self.positions.items()
+                    if owner == account_id
+                ]
 
     def fetch_open_orders(self, account_id: str) -> list[dict]:
         return [
@@ -95,28 +145,36 @@ class MockExchangeGateway(ExchangeGateway):
 
     def mark_positions(self, quotes: list[dict]) -> int:
         prices = {quote["asset"].upper(): quote for quote in quotes}
+        with self._positions_guard:
+            owners = {key[0] for key in self.positions}
         updated = 0
-        for key, position in self.positions.items():
-            asset = (
-                position["instrument"].upper().removesuffix("USDT").removesuffix("USD")
-            )
-            quote = prices.get(asset)
-            if not quote:
-                continue
-            mark = float(quote["price"])
-            quantity = float(position["quantity"])
-            average = float(position["average_price"])
-            position.update(
-                mark_price=mark,
-                unrealized_pnl=(mark - average) * quantity,
-                updated_at=quote.get("timestamp")
-                or datetime.now(timezone.utc).isoformat(),
-                market_provider=quote.get("provider"),
-            )
-            self.positions[key] = position
-            if self.store:
-                self.store.save_paper_position(position)
-            updated += 1
+        for account_id in owners:
+            with self._submission_lock(account_id):
+                self._refresh_positions(account_id)
+                with self._positions_guard:
+                    positions = [
+                        (key, position) for key, position in self.positions.items()
+                        if key[0] == account_id
+                    ]
+                for key, position in positions:
+                    asset = position["instrument"].upper().removesuffix("USDT").removesuffix("USD")
+                    quote = prices.get(asset)
+                    if not quote:
+                        continue
+                    mark = float(quote["price"])
+                    quantity = float(position["quantity"])
+                    average = float(position["average_price"])
+                    position.update(
+                        mark_price=mark,
+                        unrealized_pnl=(mark - average) * quantity,
+                        updated_at=quote.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                        market_provider=quote.get("provider"),
+                    )
+                    with self._positions_guard:
+                        self.positions[key] = position
+                    if self.store:
+                        self.store.save_paper_position(position)
+                    updated += 1
         return updated
 
     def subscribe_market_data(self, instruments: list[str]) -> dict:
@@ -126,13 +184,22 @@ class MockExchangeGateway(ExchangeGateway):
         return {"subscribed": account_id, "adapter": "mock"}
 
     def submit_order(self, order: dict) -> dict:
+        with self._submission_lock(order["account_id"]):
+            return self._submit_order_locked(order)
+
+    def _submit_order_locked(self, order: dict) -> dict:
+        self._refresh_positions(order["account_id"])
         existing = self.orders.get(order["client_order_id"])
         if existing:
             return existing
+        rejected = self._reject_invalid_reduction(order)
+        if rejected is not None:
+            return rejected
         immediate = bool(order.get("fill_immediately"))
         filled_quantity = float(order["quantity"]) if immediate else 0.0
         accepted = {
             **order,
+            "side": str(order["side"]).upper(),
             "exchange_order_id": f"mock-{uuid.uuid4().hex[:16]}",
             "state": "FILLED" if immediate else "ACCEPTED",
             "filled_quantity": filled_quantity,
@@ -150,7 +217,7 @@ class MockExchangeGateway(ExchangeGateway):
                     "realized_pnl": 0.0,
                 },
             )
-            signed = filled_quantity if order["side"] == "BUY" else -filled_quantity
+            signed = filled_quantity if accepted["side"] == "BUY" else -filled_quantity
             old_quantity = float(current["quantity"])
             old_average = float(current.get("average_price", accepted["average_price"]))
             fill_price = float(accepted["average_price"])
@@ -182,7 +249,8 @@ class MockExchangeGateway(ExchangeGateway):
                 "run_id": order.get("run_id"),
                 "updated_at": order.get("source_timestamp") or order.get("created_at"),
             }
-            self.positions[key] = position
+            with self._positions_guard:
+                self.positions[key] = position
             if self.store:
                 self.store.save_paper_position(position)
         return accepted

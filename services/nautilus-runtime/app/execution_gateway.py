@@ -57,6 +57,8 @@ class RuntimeExecutionGateway:
         self.cancel_attempts: dict[str, int] = defaultdict(int)
 
     def submit(self, request: dict) -> dict:
+        if isinstance(request.get("side"), str):
+            request = {**request, "side": request["side"].upper()}
         client_order_id = (
             request.get("client_order_id") or f"pg-{uuid.uuid4().hex[:20]}"
         )

@@ -75,13 +75,13 @@ def test_gross_exposure_is_checked_against_margin(position_quantity):
 
 @pytest.mark.parametrize("position_quantity", [1.0, -1.0], ids=["long", "short"])
 def test_reduce_only_keeps_pause_exemption_within_exposure_limit(position_quantity):
-    risk = RuntimeRiskGateway(PositionStore([{"quantity": position_quantity, "mark_price": 1000.0}]))
+    risk = RuntimeRiskGateway(PositionStore([{"instrument": "BTCUSDT", "quantity": position_quantity, "mark_price": 1000.0}]))
     risk.pause_opening("acct-1")
     risk.paused_run_ids.add("run-1")
     policy = {"max_aggregate_notional": 5000.0}
 
     opening = risk.evaluate(_order(), policy, ACCOUNT)
-    reducing = risk.evaluate(_order(reduce_only=True), policy, ACCOUNT)
+    reducing = risk.evaluate({**_order(reduce_only=True), "instrument": "BTCUSDT", "side": "SELL" if position_quantity > 0 else "BUY"}, policy, ACCOUNT)
 
     assert opening["decision"] == "REJECT"
     assert "OPENING_PAUSED" in opening["reasons"]

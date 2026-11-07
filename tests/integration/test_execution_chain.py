@@ -252,6 +252,23 @@ def test_kill_switch_blocks_mock_and_shadow_adapters(tmp_path):
 def test_pause_blocks_new_intents_resume_allows(tmp_path):
     manager = RuntimeManager(str(tmp_path / "pause.sqlite3"))
     activate(manager, "run-pause", "PAPER")
+    seeded = manager.command(
+        "submit_order",
+        "pause-seed-order",
+        base_order(
+            "run-pause",
+            "acct-run-pause",
+            quantity=0.02,
+            notional=1200,
+            mark_price=60000,
+            fill_immediately=True,
+            idempotency_key="pause-seed",
+        ),
+    )
+    assert seeded["state"] == "FILLED"
+    assert manager.exchange.fetch_positions("acct-run-pause")[0]["quantity"] == pytest.approx(
+        0.02
+    )
 
     paused = manager.command("pause", "pause-1", {"run_id": "run-pause"})
     assert paused["status"] == "PAUSED"
@@ -261,15 +278,38 @@ def test_pause_blocks_new_intents_resume_allows(tmp_path):
     assert rejected["state"] == "REJECTED"
     assert "RUN_PAUSED" in rejected["risk_decision"]["reasons"]
 
-    # Reduce-only closes remain allowed while paused.
+    increasing = manager.command(
+        "submit_order",
+        "paused-increasing-order",
+        base_order(
+            "run-pause", "acct-run-pause", reduce_only=True, idempotency_key="ro-increase"
+        ),
+    )
+    assert increasing["state"] == "REJECTED"
+    assert "REDUCE_ONLY_WOULD_INCREASE_POSITION" in increasing["risk_decision"]["reasons"]
+    assert manager.exchange.fetch_positions("acct-run-pause")[0]["quantity"] == pytest.approx(
+        0.02
+    )
+
+    # An opposite-side order can reduce the existing position while paused.
     reduce_only = manager.command(
         "submit_order",
         "paused-order-2",
         base_order(
-            "run-pause", "acct-run-pause", reduce_only=True, idempotency_key="ro-1"
+            "run-pause",
+            "acct-run-pause",
+            side="SELL",
+            direction="SELL",
+            mark_price=60000,
+            fill_immediately=True,
+            reduce_only=True,
+            idempotency_key="ro-1",
         ),
     )
-    assert reduce_only["state"] == "ACCEPTED"
+    assert reduce_only["state"] == "FILLED"
+    position = manager.exchange.fetch_positions("acct-run-pause")[0]
+    assert position["side"] == "LONG"
+    assert position["quantity"] == pytest.approx(0.01)
 
     resumed = manager.command("resume", "resume-1", {"run_id": "run-pause"})
     assert resumed["status"] == "RUNNING"

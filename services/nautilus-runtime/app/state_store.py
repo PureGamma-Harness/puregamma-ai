@@ -14,7 +14,15 @@ class RuntimeStateStore:
     def __init__(self, path: str):
         self.path = path
         self._lock = RLock()
+        self._account_locks: dict[str, RLock] = {}
         self._init()
+
+    def account_lock(self, account_id: str):
+        """Serialize account mutations across adapters sharing this store."""
+        with self._lock:
+            if account_id not in self._account_locks:
+                self._account_locks[account_id] = RLock()
+            return self._account_locks[account_id]
 
     def _connect(self):
         connection = sqlite3.connect(self.path, check_same_thread=False)
