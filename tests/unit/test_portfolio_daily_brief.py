@@ -1,8 +1,20 @@
 from datetime import datetime, timezone
+from unittest.mock import Mock
 
+import pytest
+
+from apps.api.services import daily_brief_service
 from apps.api.services.daily_brief_service import gather_context, generate_daily_brief
 from apps.api.services.report_service import create_daily_report
 from packages.database.models import AccountSnapshot, CreditLedger, PositionSnapshot, TradingAccount
+
+
+@pytest.fixture(autouse=True)
+def no_llm(monkeypatch):
+    provider_factory = Mock(side_effect=AssertionError("Private briefs must not construct an LLM provider"))
+    monkeypatch.setattr(daily_brief_service, "get_llm_provider", provider_factory)
+    yield
+    provider_factory.assert_not_called()
 
 
 def _portfolio(db, user):
@@ -19,17 +31,98 @@ def _portfolio(db, user):
     db.commit()
 
 
-def test_daily_brief_uses_tenant_portfolio_without_sending_it_to_llm(db, pro_user):
+@pytest.mark.parametrize("language", ["en", "zh"])
+def test_daily_brief_uses_tenant_portfolio_without_sending_it_to_llm(db, pro_user, language):
     _portfolio(db, pro_user)
 
-    context = gather_context(db, pro_user.id, "en")
-    brief = generate_daily_brief(db, pro_user.id, "en")
+    context = gather_context(db, pro_user.id, language)
+    brief = generate_daily_brief(db, pro_user.id, language)
 
     assert context["portfolio"]["total_nav"] == 100_000
     assert context["portfolio"]["top_holdings"][0]["symbol"] == "BTC"
+    assert context["portfolio"]["top_holdings"][0]["weight"] == 0.6
+    assert context["portfolio"]["accounts"][0]["provider"] == "hyperliquid"
     assert context["portfolio_shared_with_llm"] is False
+    assert ("NAV: $100,000.00" if language == "en" else "净值: $100,000.00") in brief
+    assert "BTC 60.0%" in brief
+    assert "(hyperliquid)" in brief
+    focus = brief.split("## Focus" if language == "en" else "## 关注", 1)[1].split("##", 1)[0]
+    assert sum(line.startswith("- ") for line in focus.splitlines()) == 2
+    assert len(brief.split()) <= 120 if language == "en" else len(brief) <= 200
+
+
+def test_daily_brief_cannot_read_another_users_portfolio(db, pro_user, normal_user):
+    _portfolio(db, pro_user)
+    _portfolio(db, normal_user)
+    db.query(AccountSnapshot).filter_by(user_id=normal_user.id).update({"equity": 9_000_000})
+    db.query(PositionSnapshot).filter_by(user_id=normal_user.id).update({"instrument": "OTHER-TENANT"})
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
     assert "NAV: $100,000.00" in brief
     assert "BTC 60.0%" in brief
+    assert "9,000,000" not in brief
+    assert "OTHER-TENANT" not in brief
+
+
+def test_daily_brief_displays_zero_nav_from_a_connected_snapshot(db, pro_user):
+    _portfolio(db, pro_user)
+    db.query(AccountSnapshot).filter_by(user_id=pro_user.id).update({"equity": 0})
+    db.query(PositionSnapshot).filter_by(user_id=pro_user.id).delete()
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
+    assert "Portfolio snapshot NAV: $0.00" in brief
+    assert "BTC 60.0%" not in brief
+
+
+def test_daily_brief_does_not_invent_a_missing_portfolio(db, pro_user):
+    pro_user.preference.include_portfolio_in_ai = False
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
+    assert "NAV" not in brief
+    assert "portfolio" not in brief.lower()
+
+
+def test_daily_brief_marks_stale_portfolio_without_presenting_old_nav(db, pro_user):
+    _portfolio(db, pro_user)
+    db.query(AccountSnapshot).filter_by(user_id=pro_user.id).update({"stale": True})
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
+    assert "Portfolio snapshot is stale" in brief
+    assert "$100,000.00" not in brief
+    assert "BTC 60.0%" not in brief
+
+
+def test_daily_brief_marks_nav_partial_when_an_account_has_no_snapshot(db, pro_user):
+    _portfolio(db, pro_user)
+    db.add(TradingAccount(user_id=pro_user.id, name="Awaiting sync", venue="PLAID", account_type="READ_ONLY", status="ACTIVE"))
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
+    assert "Partial portfolio snapshot NAV: $100,000.00" in brief
+
+
+def test_daily_brief_does_not_attribute_aggregated_holdings_to_one_provider(db, pro_user):
+    _portfolio(db, pro_user)
+    _portfolio(db, pro_user)
+    accounts = db.query(TradingAccount).filter_by(user_id=pro_user.id, account_type="READ_ONLY").all()
+    accounts[1].venue = "PLAID"
+    db.commit()
+
+    brief = generate_daily_brief(db, pro_user.id, "en")
+
+    assert "NAV: $200,000.00" in brief
+    assert "BTC 60.0%" in brief
+    assert "(multiple providers)" in brief
+    assert "(hyperliquid)" not in brief
 
 
 def test_daily_report_is_idempotent_for_user_date_and_language(db, pro_user):
