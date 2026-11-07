@@ -8,6 +8,7 @@ import socket
 from contextlib import asynccontextmanager
 from urllib.parse import urljoin
 
+import anyio
 import httpx
 import websockets.asyncio.client as wsclient
 from fastapi import FastAPI, Request, WebSocket
@@ -46,8 +47,9 @@ def _pin_for_kind(kind: str) -> str:
     return get_public_pin() if kind == "public" else get_lan_pin()
 
 
-def _cookie_value(kind: str) -> str:
-    return hmac.new(SESSION_KEY.encode(), f"{kind}:{_pin_for_kind(kind)}".encode(), hashlib.sha256).hexdigest()
+def _cookie_value(kind: str, pin: str | None = None) -> str:
+    pin = _pin_for_kind(kind) if pin is None else pin
+    return hmac.new(SESSION_KEY.encode(), f"{kind}:{pin}".encode(), hashlib.sha256).hexdigest()
 
 
 def _authorized(request: Request, kind: str) -> bool:
@@ -120,6 +122,38 @@ def _pin_gate_html(kind: str) -> str:
     )
 
 
+async def _close_upstream(client: httpx.AsyncClient, upstream: httpx.Response | None = None) -> None:
+    # Disconnects cancel the response task; cleanup still owns both resources.
+    with anyio.CancelScope(shield=True):
+        try:
+            if upstream is not None:
+                await upstream.aclose()
+        finally:
+            await client.aclose()
+
+
+class _UpstreamStreamingResponse(StreamingResponse):
+    def __init__(self, upstream: httpx.Response, client: httpx.AsyncClient):
+        super().__init__(upstream.aiter_bytes(), status_code=upstream.status_code)
+        self.upstream = upstream
+        self.client = client
+        # Preserve repeated Set-Cookie fields and require lowercase ASGI names.
+        self.raw_headers = [
+            (key.lower(), value)
+            for key, value in upstream.headers.raw
+            if key.lower() not in {
+                b"content-length", b"transfer-encoding", b"connection",
+                b"content-encoding", b"keep-alive",
+            }
+        ]
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await _close_upstream(self.client, self.upstream)
+
+
 async def _proxy_http(request: Request) -> Response:
     target = urljoin(settings.web_target + "/", request.url.path.lstrip("/"))
     if request.url.query:
@@ -131,21 +165,22 @@ async def _proxy_http(request: Request) -> Response:
     headers["x-forwarded-host"] = request.headers.get("host", "")
     headers["x-forwarded-proto"] = "https" if request.headers.get("host", "").endswith("trycloudflare.com") else "http"
     body = await request.body()
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10, read=120, write=30, pool=10),
+        follow_redirects=False,
+        trust_env=False,
+    )
+    upstream = None
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10, read=120, write=30, pool=10),
-            follow_redirects=False,
-            trust_env=False,
-        ) as client:
-            upstream_request = client.build_request(request.method, target, headers=headers, content=body or None)
-            upstream = await client.send(upstream_request, stream=True)
-            resp_headers = {
-                key: value for key, value in upstream.headers.items()
-                if key.lower() not in {"content-length", "transfer-encoding", "connection", "content-encoding", "keep-alive"}
-            }
-            return StreamingResponse(upstream.aiter_bytes(), status_code=upstream.status_code, headers=resp_headers)
+        upstream_request = client.build_request(request.method, target, headers=headers, content=body or None)
+        upstream = await client.send(upstream_request, stream=True)
+        return _UpstreamStreamingResponse(upstream, client)
     except httpx.HTTPError as exc:
+        await _close_upstream(client, upstream)
         return JSONResponse({"detail": "upstream unavailable", "error": str(exc)[:200]}, status_code=502)
+    except BaseException:
+        await _close_upstream(client, upstream)
+        raise
 
 
 class ProxyMiddleware(BaseHTTPMiddleware):
@@ -157,13 +192,16 @@ class ProxyMiddleware(BaseHTTPMiddleware):
         if request.method not in settings.allowed_methods:
             return JSONResponse({"detail": "method not allowed"}, status_code=405)
         kind = _kind_for_host(request.headers.get("host", "").split(":")[0])
-        if _authorized(request, kind):
-            return await _proxy_http(request)
         provided = request.query_params.get("pin", "")
         if provided and hmac.compare_digest(provided, _pin_for_kind(kind)):
+            # Bind to the PIN just verified, before awaiting the upstream. A PIN
+            # rotated during that wait must not issue a session for its successor.
+            session_cookie = _cookie_value(kind, provided)
             response = await _proxy_http(request)
-            response.set_cookie(COOKIE_NAME, _cookie_value(kind), max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
+            response.set_cookie(COOKIE_NAME, session_cookie, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
             return response
+        if _authorized(request, kind):
+            return await _proxy_http(request)
         accept = request.headers.get("accept", "")
         if "text/html" in accept:
             return HTMLResponse(_pin_gate_html(kind), status_code=401)

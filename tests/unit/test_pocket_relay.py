@@ -87,6 +87,7 @@ def test_proxy_requires_pin(client, upstream_requests):
     assert len(upstream_requests) == 1
     assert upstream_requests[0].url.host == "127.0.0.1"
     assert upstream_requests[0].headers["x-forwarded-host"] == PUBLIC_HOST
+    client.cookies.clear()
     gate = client.get("/", headers={**headers, "accept": "text/html"})
     assert gate.status_code == 401
     assert "访问验证" in gate.text
