@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -46,7 +47,8 @@ def _grant_plan_monthly_credits(
     metadata: dict | None = None,
 ) -> CreditLedger:
     """Grant a billing period once while enforcing the plan carryover cap."""
-    locked = db.query(User).filter(User.id == user.id).with_for_update().one()
+    db.flush()
+    locked = db.query(User).filter(User.id == user.id).populate_existing().with_for_update().one()
     plan = get_plan(plan_name)
     amount = plan.monthly_credits
     if plan.carryover_cap:
@@ -751,10 +753,14 @@ def _handle_charge_refunded(db: Session, obj: dict) -> None:
             amount_usd = Decimal(str(intent.amount_cents or 0)) / 100
             if amount_usd > 0:
                 wallet = gateway_wallet(db, intent.user_id, lock=True)
+                balance_before = Decimal(str(wallet.available_balance_usd or 0))
                 wallet.available_balance_usd = max(
                     Decimal("0"),
-                    Decimal(str(wallet.available_balance_usd or 0)) - amount_usd,
+                    balance_before - amount_usd,
                 )
+                # Spent credit cannot be recovered below zero; ledger only
+                # the actual wallet movement and retain the shortfall below.
+                reversed_usd = balance_before - wallet.available_balance_usd
                 wallet.lifetime_credited_usd = max(
                     Decimal("0"),
                     Decimal(str(wallet.lifetime_credited_usd or 0)) - amount_usd,
@@ -764,10 +770,15 @@ def _handle_charge_refunded(db: Session, obj: dict) -> None:
                         wallet_id=wallet.id,
                         user_id=intent.user_id,
                         entry_type="topup_refund",
-                        amount_usd=-amount_usd,
+                        amount_usd=-reversed_usd,
                         balance_after_usd=wallet.available_balance_usd,
                         idempotency_key=f"topup-refund:{intent.id}",
-                        metadata_json={"charge_id": charge_id, "topup_intent_id": intent.id},
+                        metadata_json={
+                            "charge_id": charge_id,
+                            "topup_intent_id": intent.id,
+                            "requested_refund_usd": f"{amount_usd:.8f}",
+                            "unrecovered_refund_usd": f"{amount_usd - reversed_usd:.8f}",
+                        },
                     )
                 )
             intent.status = "refunded"
