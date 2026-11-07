@@ -6,7 +6,7 @@ import hmac
 import secrets
 import socket
 from contextlib import asynccontextmanager
-from urllib.parse import urljoin
+from urllib.parse import quote, quote_from_bytes, unquote_to_bytes
 
 import anyio
 import httpx
@@ -154,10 +154,56 @@ class _UpstreamStreamingResponse(StreamingResponse):
             await _close_upstream(self.client, self.upstream)
 
 
+def _request_path(request: Request) -> str:
+    """Use the ASGI application path with the router's mount-prefix semantics."""
+    path = request.scope["path"]
+    root_path = request.scope.get("root_path", "")
+    if root_path and path.startswith(root_path):
+        relative = path[len(root_path):]
+        if not relative or relative.startswith("/"):
+            return relative
+    return path
+
+
+def _strip_raw_prefix(raw_path: bytes, prefix: str) -> bytes | None:
+    """Remove a decoded mount prefix while retaining the remaining wire bytes."""
+    offset = 0
+    for value in prefix.encode("utf-8"):
+        token = raw_path[offset:offset + 1]
+        width = 1
+        if token == b"%":
+            token = unquote_to_bytes(raw_path[offset:offset + 3])
+            width = 3
+        if token != bytes([value]):
+            return None
+        offset += width
+    return raw_path[offset:]
+
+
+def _upstream_url(request: Request) -> httpx.URL:
+    path = _request_path(request)
+    raw_path = request.scope.get("raw_path")
+    if raw_path is not None and path != request.scope["path"]:
+        raw_path = _strip_raw_prefix(raw_path, request.scope["root_path"])
+    safe = "/:@!$&'()*+,;=-._~"
+    if raw_path is None:
+        encoded_path = quote(path, safe=safe)
+    else:
+        encoded_path = quote_from_bytes(raw_path, safe=safe + "%")
+    if not encoded_path.startswith("/"):
+        encoded_path = "/" + encoded_path
+    base = httpx.URL(settings.web_target)
+    base_path = base.raw_path.split(b"?", 1)[0].decode("ascii").rstrip("/")
+    # Copy path/query components, never resolve the incoming path as a URL.
+    return base.copy_with(
+        path=base_path + encoded_path,
+        query=request.scope.get("query_string", b"") or None,
+        fragment=None,
+    )
+
+
 async def _proxy_http(request: Request) -> Response:
-    target = urljoin(settings.web_target + "/", request.url.path.lstrip("/"))
-    if request.url.query:
-        target += "?" + request.url.query
+    target = _upstream_url(request)
     headers = {
         key: value for key, value in request.headers.items()
         if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}
@@ -187,7 +233,7 @@ class ProxyMiddleware(BaseHTTPMiddleware):
     """所有未保留路径的 HTTP 请求：先 PIN 鉴权，再反向代理到 puregamma web。"""
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith(RESERVED_PREFIXES):
+        if _request_path(request).startswith(RESERVED_PREFIXES):
             return await call_next(request)
         if request.method not in settings.allowed_methods:
             return JSONResponse({"detail": "method not allowed"}, status_code=405)
