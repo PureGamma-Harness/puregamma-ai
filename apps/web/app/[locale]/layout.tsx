@@ -11,7 +11,8 @@ export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-export async function generateMetadata({ params }: { params: { locale: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   if (!isLocale(params.locale)) return {};
   const messages = getMessages(params.locale);
   const title = messages.landing.seo.title;
@@ -39,7 +40,8 @@ export async function generateMetadata({ params }: { params: { locale: string } 
   };
 }
 
-export default function LocaleLayout({ children, params }: { children: ReactNode; params: { locale: string } }) {
+export default async function LocaleLayout({ children, params: paramsPromise }: { children: ReactNode; params: Promise<{ locale: string }> }) {
+  const params = await paramsPromise;
   if (!isLocale(params.locale)) notFound();
   const locale = params.locale as Locale;
   return <AppShell locale={locale}>{children}</AppShell>;

@@ -1,7 +1,8 @@
 import { JevAdvisoryConsole } from "@/components/jev-advisory-console";
 import type { Locale } from "@/i18n/routing";
 
-export default function JevTraderPage({ params }: { params: { locale: Locale } }) {
+export default async function JevTraderPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const zh = params.locale === "zh";
   return <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
     <div className="mb-6">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Bell, Info, Mail, MessageCircle, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/puregamma";
 import { normalizeLocale, withLocale, type Locale } from "@/i18n/routing";
@@ -18,7 +18,8 @@ const channelIcons: Record<string, LucideIcon> = {
 
 type InputType = "email" | "text" | "tel";
 
-export default function LocalizedOnboardingChannelsPage({ params }: { params: { locale: string } }) {
+export default function LocalizedOnboardingChannelsPage() {
+  const params = useParams<{ locale: string }>();
   const locale = normalizeLocale(params.locale);
   const router = useRouter();
   const copy = getMessageNamespace(locale, "onboarding").channels;

@@ -23,12 +23,15 @@ type StripeProductStatus = {
   items: { plan_name: string; status: string; local?: { stripe_price_id?: string | null; monthly_price?: number | null } | null; stripe?: { stripe_price_id?: string | null; monthly_price?: number | null } | null }[];
 };
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "admin", "/admin/stripe-events");
 }
 
-export default async function StripeEventsPage({ params, searchParams }: { params: { locale: Locale }; searchParams?: { event_type?: string; page?: string } }) {
+export default async function StripeEventsPage({ params: paramsPromise, searchParams: searchParamsPromise }: { params: Promise<{ locale: Locale }>; searchParams?: Promise<{ event_type?: string; page?: string }> }) {
+  const params = await paramsPromise;
+  const searchParams = await searchParamsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "admin");
   const [data, products] = await Promise.all([

@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function ResetPasswordRedirect() {
-  redirectToLocalized("/reset-password");
+export default async function ResetPasswordRedirect() {
+  return redirectToLocalized("/reset-password");
 }

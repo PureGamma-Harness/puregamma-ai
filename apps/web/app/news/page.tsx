@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function NewsRedirect() {
-  redirectToLocalized("/news");
+export default async function NewsRedirect() {
+  return redirectToLocalized("/news");
 }

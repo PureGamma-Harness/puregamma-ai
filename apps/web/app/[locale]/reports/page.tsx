@@ -5,12 +5,14 @@ import { localizedMetadata } from "@/lib/metadata";
 import { getMessageNamespace } from "@/lib/translations";
 import { isLocale, type Locale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "reports", "/reports");
 }
 
-export default async function ReportsPage({ params }: { params: { locale: Locale } }) {
+export default async function ReportsPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "reports");
   const data = await getReports(locale);

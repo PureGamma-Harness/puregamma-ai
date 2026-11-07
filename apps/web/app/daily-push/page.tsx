@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function DailyPushRedirect() {
-  redirectToLocalized("/daily-push");
+export default async function DailyPushRedirect() {
+  return redirectToLocalized("/daily-push");
 }

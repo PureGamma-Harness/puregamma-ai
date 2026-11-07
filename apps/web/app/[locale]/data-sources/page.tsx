@@ -6,12 +6,14 @@ import { getMessageNamespace } from "@/lib/translations";
 import { isLocale, type Locale } from "@/i18n/routing";
 import { DataSourceTable } from "@/components/data-source-table";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "data-sources", "/data-sources");
 }
 
-export default async function DataSourcesPage({ params }: { params: { locale: Locale } }) {
+export default async function DataSourcesPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "data-sources");
   const data = await getDataSources(locale);

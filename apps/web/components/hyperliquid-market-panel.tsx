@@ -136,7 +136,7 @@ export function HyperliquidMarketPanel({ locale }: { locale: Locale }) {
   const [isOpen, setIsOpen] = useState(true);
   const [status, setStatus] = useState<"connecting" | "live" | "reconnecting">("connecting");
   const [market, setMarket] = useState<MarketState>({});
-  const retryTimer = useRef<ReturnType<typeof setTimeout>>();
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const retryCount = useRef(0);
 
   useEffect(() => {

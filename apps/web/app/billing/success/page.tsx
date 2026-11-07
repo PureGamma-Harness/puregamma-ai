@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function BillingSuccessRedirect() {
-  redirectToLocalized("/billing/success");
+export default async function BillingSuccessRedirect() {
+  return redirectToLocalized("/billing/success");
 }

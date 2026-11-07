@@ -1,5 +1,5 @@
 import { redirectToLocalized } from "@/app/legacy-redirect";
 
-export default function OnboardingChannelsRedirect() {
-  redirectToLocalized("/onboarding/channels");
+export default async function OnboardingChannelsRedirect() {
+  return redirectToLocalized("/onboarding/channels");
 }

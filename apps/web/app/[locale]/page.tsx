@@ -12,12 +12,14 @@ import { localizedMetadata } from "@/lib/metadata";
 import { getMessageNamespace } from "@/lib/translations";
 import { isLocale, type Locale, withLocale } from "@/i18n/routing";
 
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const locale = isLocale(params.locale) ? params.locale : "en";
   return localizedMetadata(locale, "landing");
 }
 
-export default async function LandingPage({ params }: { params: { locale: Locale } }) {
+export default async function LandingPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+  const params = await paramsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "landing");
   const modelCopy = getMessageNamespace(locale, "model-upgrade");
