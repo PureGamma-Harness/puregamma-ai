@@ -135,7 +135,7 @@ jobs:
           print(f'Selected {name}, iOS {version}, {udid}')
           PY
 
-      - name: Run iOS unit tests without signing
+      - name: Run iOS unit tests with local simulator signing
         working-directory: apps/ios
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
@@ -151,4 +151,16 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/puregamma-ios-tests" \
             -only-testing:PureGammaTests \
             -parallel-testing-enabled NO \
-            CODE_SIGNING_ALLOWED=NO SWIFT_VERSION=5.0
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO SWIFT_VERSION=5.0
+
+      - name: Inspect simulator test host entitlements
+        if: always()
+        run: |
+          # Local ad-hoc signing needs no developer certificate or secrets,
+          # and preserves the entitlements used by the Keychain tests.
+          app="$RUNNER_TEMP/puregamma-ios-tests/Build/Products/Debug-iphonesimulator/PureGamma.app"
+          if [ -d "$app" ]; then
+            codesign --display --verbose=2 "$app"
+            codesign --display --entitlements - "$app"
+          fi
