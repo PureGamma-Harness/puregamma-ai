@@ -7,3 +7,7 @@ allowBuilds:
 # when typescript-estree declares a patched dependency range.
 overrides:
   "@typescript-eslint/typescript-estree>minimatch": 11.0.5
+  # Pin only the affected consumers; Next pins an older PostCSS exactly.
+  "next>postcss": 8.5.23
+  "postcss>source-map-js": 1.2.2
+  "@cordisjs/loader>js-yaml": 4.3.2

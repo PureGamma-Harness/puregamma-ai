@@ -7,6 +7,7 @@ on:
       - 'apps/web/pnpm-lock.yaml'
       - 'apps/web/pnpm-workspace.yaml'
       - 'apps/web/tests/minimatch-compat.test.cjs'
+      - 'apps/web/tests/production-dependency-compat.test.cjs'
       - '.github/workflows/web-dependencies.yml'
   push:
     branches: [main, refactor/harness-core-v2]
@@ -15,6 +16,7 @@ on:
       - 'apps/web/pnpm-lock.yaml'
       - 'apps/web/pnpm-workspace.yaml'
       - 'apps/web/tests/minimatch-compat.test.cjs'
+      - 'apps/web/tests/production-dependency-compat.test.cjs'
       - '.github/workflows/web-dependencies.yml'
 
 permissions:
