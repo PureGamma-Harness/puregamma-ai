@@ -96,9 +96,41 @@ def test_fill_notional_divergence_pauses_opening():
 def test_fill_quantity_divergence_paused():
     local = [_order("f1", "FILLED", quantity=1.0, filled_quantity=0.5, average_price=100.0)]
     remote_fills = [_order("f1", "FILLED", quantity=1.0, filled_quantity=1.0, average_price=100.0)]
-    result, _ = _reconciler(local, [], remote_fills)
+    result, risk = _reconciler(local, [], remote_fills)
     assert result["drift"]["fill_quantity_diverged"] is True
     assert result["drift"]["fills_diverged"] is True
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert "acct-1" in risk.pause_opening_accounts
+
+
+def test_fill_quantity_divergence_with_equal_notional_keeps_opening_paused():
+    local = [_order("f1", "FILLED", quantity=1.0, filled_quantity=1.0, average_price=100.0)]
+    remote_fills = [_order("f1", "FILLED", quantity=2.0, filled_quantity=2.0, average_price=50.0)]
+    risk = RuntimeRiskGateway()
+    risk.pause_opening("acct-1")
+
+    result, _ = _reconciler(local, [], remote_fills, risk=risk)
+
+    assert result["drift"]["local_fill_notional"] == result["drift"]["adapter_fill_notional"]
+    assert result["drift"]["fill_quantity_diverged"] is True
+    assert result["status"] == "RECONCILIATION_REQUIRED"
+    assert result["opening_paused"] is True
+    assert "acct-1" in risk.pause_opening_accounts
+
+
+def test_matching_fills_clear_opening_pause():
+    local = [_order("f1", "FILLED", quantity=1.0, filled_quantity=1.0, average_price=100.0)]
+    remote_fills = [{"client_order_id": "f1", "quantity": 1.0, "price": 100.0}]
+    risk = RuntimeRiskGateway()
+    risk.pause_opening("acct-1")
+
+    result, _ = _reconciler(local, [], remote_fills, risk=risk)
+
+    assert result["drift"]["fill_quantity_diverged"] is False
+    assert result["drift"]["fills_diverged"] is False
+    assert result["status"] == "RECONCILED"
+    assert result["opening_paused"] is False
+    assert "acct-1" not in risk.pause_opening_accounts
 
 
 def test_pause_cleared_when_reconciled_again():

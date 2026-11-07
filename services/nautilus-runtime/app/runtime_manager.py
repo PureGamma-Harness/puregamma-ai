@@ -199,9 +199,7 @@ class RuntimeManager:
             elif command_type == "submit_order":
                 result = self._submit_order(payload)
             elif command_type == "cancel_order":
-                result = self.execution.cancel(
-                    payload["account_id"], payload["client_order_id"], idempotency_key
-                )
+                result = self._cancel_order(payload, idempotency_key)
             elif command_type == "reconcile":
                 result = self._reconcile(payload["account_id"])
             elif command_type == "kill_switch":
@@ -290,6 +288,23 @@ class RuntimeManager:
                 self.store, self.gateway_for_account(account), self.risk
             )
         return self._execution_gateways[key].submit(payload)
+
+    def _cancel_order(self, payload: dict, idempotency_key: str) -> dict:
+        current = self.store.latest_order(payload["client_order_id"])
+        if not current:
+            return {"client_order_id": payload["client_order_id"], "state": "UNKNOWN"}
+        if current["account_id"] != payload["account_id"]:
+            raise ValueError("Order does not belong to account")
+        run = self.store.get_run(current["run_id"]) if current.get("run_id") else None
+        # Route using the persisted order/run, never caller-supplied mode or venue.
+        execution = self._execution_for_run({
+            "account": current.get("account") or (run or {}).get("account")
+            or self._account_config(current["account_id"]),
+            "mode": current.get("mode") or (run or {}).get("mode"),
+        })
+        return execution.cancel(
+            current["account_id"], current["client_order_id"], idempotency_key
+        )
 
     def _reconcile(self, account_id: str) -> dict:
         account = self._account_config(account_id)
