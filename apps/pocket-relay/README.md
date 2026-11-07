@@ -8,6 +8,8 @@
 
 ## 运行
 
+需要 Python 3.11 或更新版本。
+
     cd apps/pocket-relay
     pip install -r requirements.txt
     export POCKET_WEB_TARGET=http://localhost:3000
