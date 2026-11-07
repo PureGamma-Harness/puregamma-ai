@@ -94,7 +94,7 @@ class RuntimeReconciler:
             "fill_quantity_diverged": quantity_diverged,
         }
 
-        needs_pause = bool(unknown or remote_only or fills_diverged)
+        needs_pause = bool(unknown or remote_only or fills_diverged or quantity_diverged)
         if needs_pause:
             self.risk.pause_opening(account_id)
         else:
