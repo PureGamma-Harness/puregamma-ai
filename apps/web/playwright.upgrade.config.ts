@@ -16,7 +16,7 @@ export default defineConfig({
       : {}),
   },
   webServer: {
-    command: "node .next-build/standalone/server.js",
+    command: "node --require ./tests/offline-fetch-guard.cjs .next-build/standalone/server.js",
     url: `http://127.0.0.1:${port}/health`,
     timeout: 60_000,
     reuseExistingServer: false,

@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - 'apps/web/**'
-      - 'tests/e2e/playwright/next-upgrade-smoke.spec.ts'
+      - 'tests/e2e/playwright/next-upgrade-*.ts'
       - '.github/workflows/web-runtime-security.yml'
   push:
     branches: [main, refactor/harness-core-v2]
     paths:
       - 'apps/web/**'
-      - 'tests/e2e/playwright/next-upgrade-smoke.spec.ts'
+      - 'tests/e2e/playwright/next-upgrade-*.ts'
       - '.github/workflows/web-runtime-security.yml'
 
 permissions:
@@ -49,6 +49,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm test:dependency-compat
       - run: pnpm test:runtime-security
+      - run: node --test tests/offline-fetch-guard.test.cjs
       - run: pnpm build
       - name: Verify the standalone runtime's actual image library
         run: |
