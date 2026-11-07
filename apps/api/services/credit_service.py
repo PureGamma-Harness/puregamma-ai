@@ -40,7 +40,9 @@ def consume_credits(db: Session, user_id: str, action: str, amount: int, metadat
         existing = db.query(CreditLedger).filter_by(idempotency_key=idempotency_key).one_or_none()
         if existing:
             return existing
-    user = db.query(User).filter(User.id == user_id).with_for_update().one_or_none()
+    # Flush pending changes before refreshing the cached account under its lock.
+    db.flush()
+    user = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one_or_none()
     if not user:
         raise ValueError(f"User not found: {user_id}")
     # Re-check after the account lock. This closes the race where two requests
@@ -66,7 +68,9 @@ def refund_credits(db: Session, user_id: str, action: str, amount: int, metadata
         existing = db.query(CreditLedger).filter_by(idempotency_key=idempotency_key).one_or_none()
         if existing:
             return existing
-    user = db.query(User).filter(User.id == user_id).with_for_update().one_or_none()
+    # Flush pending changes before refreshing the cached account under its lock.
+    db.flush()
+    user = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one_or_none()
     if not user:
         raise ValueError(f"User not found: {user_id}")
     if idempotency_key:
@@ -86,7 +90,9 @@ def grant_credits(db: Session, user_id: str, action: str, amount: int, metadata:
         existing = db.query(CreditLedger).filter_by(idempotency_key=idempotency_key).one_or_none()
         if existing:
             return existing
-    user = db.query(User).filter(User.id == user_id).with_for_update().one_or_none()
+    # Flush pending changes before refreshing the cached account under its lock.
+    db.flush()
+    user = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one_or_none()
     if not user:
         raise ValueError(f"User not found: {user_id}")
     if idempotency_key:
@@ -143,7 +149,8 @@ def reserve_task(
     # Serialize all mutations for the account, then repeat the idempotency
     # lookup. Without this second lookup two concurrent requests can both pass
     # the optimistic check and collide while creating the reservation row.
-    db.query(User).filter(User.id == user_id).with_for_update().one()
+    db.flush()
+    db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one()
     existing, key = _reusable_reservation(db, user_id, idempotency_key)
     if existing:
         return CreditReservation(
@@ -277,7 +284,8 @@ def settle_task(
         )
     elif adjustment < 0:
         extra = -adjustment
-        account = db.query(User).filter(User.id == user_id).with_for_update().one()
+        db.flush()
+        account = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one()
         if get_settings().credit_usage_enforced and account.credit_balance < extra:
             # Never turn a completed provider call into a full free refund and
             # never create a negative balance. Record the unbilled overage for

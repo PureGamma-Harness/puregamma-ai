@@ -68,7 +68,10 @@ def topup_amount_to_cents(amount_usd: Decimal | int | float | str) -> int:
 def gateway_wallet(db: Session, user_id: str, *, lock: bool = False) -> GatewayWallet:
     query = db.query(GatewayWallet).filter_by(user_id=user_id)
     if lock:
-        query = query.with_for_update()
+        # A balance preflight may have loaded this wallet before a concurrent
+        # request committed. Refresh it under the lock, preserving local writes.
+        db.flush()
+        query = query.populate_existing().with_for_update()
     wallet = query.one_or_none()
     if wallet is None:
         wallet = GatewayWallet(user_id=user_id, currency="USD")
