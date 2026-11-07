@@ -1,0 +1,48 @@
+name: Site compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'apps/site/**'
+      - '.github/workflows/site-compatibility.yml'
+  push:
+    branches: [main, refactor/harness-core-v2]
+    paths:
+      - 'apps/site/**'
+      - '.github/workflows/site-compatibility.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        node: ['22', '24']
+    defaults:
+      run:
+        working-directory: apps/site
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      WRANGLER_SEND_METRICS: 'false'
+      WRANGLER_WRITE_LOGS: 'false'
+      WRANGLER_LOG_PATH: .wrangler/ci.log
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: apps/site/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
