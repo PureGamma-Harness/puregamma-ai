@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import re
 import secrets
 import socket
 from contextlib import asynccontextmanager
@@ -98,12 +99,48 @@ def _lan_ipv4s() -> list[str]:
     return addresses
 
 
+_LOCAL_AUTHORITY = re.compile(r"\A(localhost|127\.0\.0\.1|\[::1\])(?::([0-9]{1,5}))?\Z", re.I | re.ASCII)
+
+
+def _local_authority(value: str) -> tuple[str, int | None] | None:
+    match = _LOCAL_AUTHORITY.fullmatch(value)
+    if match is None:
+        return None
+    port = int(match[2]) if match[2] is not None else None
+    if port is not None and port > 65535:
+        return None
+    return match[1].lower(), port
+
+
 def _rpc_allowed(request: Request) -> bool:
     if settings.rpc_secret:
-        token = request.headers.get("x-pocket-rpc-token", "")
-        return hmac.compare_digest(token, settings.rpc_secret)
+        tokens = request.headers.getlist("x-pocket-rpc-token")
+        try:
+            return len(tokens) == 1 and hmac.compare_digest(tokens[0], settings.rpc_secret)
+        except TypeError:  # Non-ASCII untrusted header values are invalid credentials.
+            return False
     client = request.client.host if request.client else ""
-    return client in {"127.0.0.1", "::1", "localhost"}
+    if client not in {"127.0.0.1", "::1", "localhost"}:
+        return False
+    hosts = request.headers.getlist("host")
+    authority = _local_authority(hosts[0]) if len(hosts) == 1 else None
+    if authority is None:
+        return False
+    origins = request.headers.getlist("origin")
+    if not origins:  # Preserve local command-line and API clients.
+        return True
+    if len(origins) != 1:
+        return False
+    scheme, separator, origin_host = origins[0].partition("://")
+    scheme = scheme.lower()
+    origin = _local_authority(origin_host) if separator and scheme in {"http", "https"} else None
+    request_scheme = request.scope.get("scheme", "http").lower()
+    if origin is None or scheme != request_scheme:
+        return False
+    default_port = 443 if scheme == "https" else 80
+    origin_port = origin[1] if origin[1] is not None else default_port
+    request_port = authority[1] if authority[1] is not None else default_port
+    return origin[0] == authority[0] and origin_port == request_port
 
 
 def _pin_gate_html(kind: str) -> str:
@@ -314,29 +351,83 @@ h1{font-size:20px}h2{font-size:15px;margin:20px 0 8px}.card{background:#191c22;b
 .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.muted{color:#a2a4a6;font-size:13px}
 .pin{font-size:26px;letter-spacing:6px;font-weight:600;color:#d6b35a}button{background:#d6b35a;color:#101216;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px}
 button.secondary{background:#2a2d34;color:#f5f6f8}img{border-radius:10px;background:#fff;padding:6px}a{color:#7fb3ff}
+input{background:#101216;color:#f5f6f8;border:1px solid #3a3d44;border-radius:8px;padding:9px;min-width:220px}button:disabled{opacity:.5;cursor:default}[hidden]{display:none!important}
 </style></head><body>
 <h1>📱 手机访问</h1>
+<form class="card" id="rpc-key-form" hidden onsubmit="unlock(event)">
+<label for="rpc-key">管理密钥</label>
+<p class="muted">填写服务配置的 POCKET_RPC_SECRET。密钥仅用于当前页面，不会写入网址或浏览器存储。如未配置密钥，请使用本机地址访问。</p>
+<div class="row"><input id="rpc-key" type="password" autocomplete="off" required><button type="submit">连接管理接口</button></div>
+</form>
+<p class="muted" id="rpc-message" role="status" aria-live="polite"></p>
 
 <div class="card"><h2>🌐 公网（cloudflared 隧道）</h2>
-<div class="row"><button id="tunnel-btn" onclick="toggleTunnel()">开启公网访问</button><span class="muted" id="tunnel-state">未开启</span></div>
-<div class="row" style="margin-top:10px"><img id="pub-qr" alt="PUB QR"><div>
+<div class="row"><button id="tunnel-btn" onclick="toggleTunnel()" disabled>开启公网访问</button><span class="muted" id="tunnel-state">等待状态</span></div>
+<div class="row" style="margin-top:10px"><img id="pub-qr" alt="公网访问二维码" hidden><div>
 <div class="pin" id="pub-pin">—</div><div class="muted" id="pub-url"></div>
-<div class="row" style="margin-top:8px"><button class="secondary" onclick="rot('public')">刷新密码</button></div></div></div></div>
+<div class="row" style="margin-top:8px"><button class="secondary" id="rotate-btn" onclick="rot('public')" disabled>刷新密码</button></div></div></div></div>
 <div class="card muted">目标：<span id="target"></span> · 服务重启后手机需重新输入密码 · RPC 仅本机/密钥</div>
 <script>
-const J=(o)=>JSON.stringify(o);
-async function load(){const s=await (await fetch('/rpc/status')).json();
-document.getElementById('pub-pin').textContent=s.public.pin;
-document.getElementById('tunnel-state').textContent=s.public.running?('运行中 '+s.public.url):'未开启';
-document.getElementById('tunnel-btn').textContent=s.public.running?'关闭公网访问':'开启公网访问';
-if(s.public.running){document.getElementById('pub-url').textContent=s.public.url;
-document.getElementById('pub-qr').src='/rpc/qr?kind=public';}
-document.getElementById('target').textContent=s.target;}
-async function toggleTunnel(){const s=await (await fetch('/rpc/status')).json();
-const action=s.public.running?'stop':'start';
-await fetch('/rpc/tunnel/'+action,{method:'POST'});load();}
-async function rot(which){await fetch('/rpc/pin/rotate',{method:'POST',headers:{'Content-Type':'application/json'},body:J({which})});load();}
-load();
+const el=(id)=>document.getElementById(id);
+let rpcToken='', qrObjectUrl=null;
+function actionsDisabled(value){el('tunnel-btn').disabled=value;el('rotate-btn').disabled=value;}
+function clearQr(){
+  if(qrObjectUrl)URL.revokeObjectURL(qrObjectUrl);
+  qrObjectUrl=null;el('pub-qr').removeAttribute('src');el('pub-qr').hidden=true;
+}
+function showError(error){
+  clearQr();actionsDisabled(true);el('pub-pin').textContent='—';el('pub-url').textContent='';
+  el('target').textContent='';el('tunnel-state').textContent='无法读取状态';
+  el('rpc-message').textContent=error.message||'管理接口连接失败，请刷新页面重试。';
+}
+async function rpc(path,options={}){
+  const headers=new Headers(options.headers||{});
+  if(rpcToken)headers.set('x-pocket-rpc-token',rpcToken);
+  const response=await fetch(path,{...options,headers,mode:'same-origin',redirect:'error',cache:'no-store'});
+  if(!response.ok){
+    if(response.status===403){
+      rpcToken='';el('rpc-key-form').hidden=false;
+      throw new Error('管理访问被拒绝。请填写管理密钥；未配置密钥时请使用本机地址。');
+    }
+    throw new Error('管理接口请求失败（'+response.status+'），请刷新页面重试。');
+  }
+  return response;
+}
+async function load(){
+  const status=await(await rpc('/rpc/status')).json();
+  let nextQr=null;
+  if(status.public.running)nextQr=URL.createObjectURL(await(await rpc('/rpc/qr?kind=public')).blob());
+  clearQr();qrObjectUrl=nextQr;
+  if(nextQr){el('pub-qr').src=nextQr;el('pub-qr').hidden=false;}
+  el('pub-pin').textContent=status.public.pin;
+  el('tunnel-state').textContent=status.public.running?('运行中 '+status.public.url):'未开启';
+  el('tunnel-btn').textContent=status.public.running?'关闭公网访问':'开启公网访问';
+  el('pub-url').textContent=status.public.running?status.public.url:'';
+  el('target').textContent=status.target;el('rpc-key-form').hidden=true;
+  el('rpc-message').textContent=rpcToken?'管理密钥仅保留在此页面，关闭页面后需重新填写。':'';
+  actionsDisabled(false);
+}
+async function unlock(event){
+  event.preventDefault();rpcToken=el('rpc-key').value;el('rpc-key').value='';
+  try{await load();}catch(error){showError(error);}
+}
+async function toggleTunnel(){
+  actionsDisabled(true);
+  try{
+    const status=await(await rpc('/rpc/status')).json();
+    await rpc('/rpc/tunnel/'+(status.public.running?'stop':'start'),{method:'POST'});
+    await load();
+  }catch(error){showError(error);}
+}
+async function rot(which){
+  actionsDisabled(true);
+  try{
+    await rpc('/rpc/pin/rotate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({which})});
+    await load();
+  }catch(error){showError(error);}
+}
+window.addEventListener('beforeunload',clearQr);
+load().catch(showError);
 </script></body></html>"""
 
 

@@ -55,5 +55,13 @@ jobs:
       - name: Install API and Pocket Relay test dependencies
         run: python -m pip install -r apps/api/requirements.txt -r apps/pocket-relay/requirements.txt
 
+      - name: Use Node 22 for the built-in Relay control page tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify the built-in Relay control page
+        run: node --test apps/pocket-relay/tests/control-page.test.cjs
+
       - name: Run the backend regression suite
         run: python -m pytest -q -ra
