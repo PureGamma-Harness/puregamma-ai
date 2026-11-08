@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Link2, Loader2, Play, RefreshCw, Trash2, Wallet } from "lucide-react";
 import { AllocationChart, NavHistoryChart } from "@/components/charts";
 import { PmAccountPanel } from "@/components/pm-account-panel";
 import { HoldingRow, ProviderCard } from "@/components/portfolio-panels";
 import { ResearchCard } from "@/components/puregamma";
+import { OperationConfirmation } from "@/components/operation-confirmation";
 import { StaleDataBanner } from "@/components/financial/stale-data-banner";
 import { StatusBadge } from "@/components/ocean/status-badge";
-import { connectEvmWallet, connectHyperliquid, createEvmWalletChallenge, createPlaidLinkToken, disconnectPortfolioAccount, exchangePlaidToken, getMe, getPlaidInvestmentTransactions, getPortfolioSnapshot, getTradingNav, getTradingSafetyStatus, requestPlaidInvestmentRefresh, syncPortfolioAccount, type NavSnapshot, type PortfolioHolding, type PortfolioInvestmentTransaction, type PortfolioSnapshot, getPmAccount, getPmNavHistory, type PmAccountView, type PmNavHistory } from "@/lib/api";
+import { connectEvmWallet, connectHyperliquid, createEvmWalletChallenge, createPlaidLinkToken, disconnectPortfolioAccount, exchangePlaidToken, getMe, getPlaidInvestmentTransactions, getPortfolioSnapshot, getTradingNav, getTradingSafetyStatus, requestPlaidInvestmentRefresh, syncPortfolioAccount, type NavSnapshot, type PortfolioHolding, type PortfolioInvestmentTransaction, type PortfolioSnapshot, type PortfolioConnection, getPmAccount, getPmNavHistory, type PmAccountView, type PmNavHistory } from "@/lib/api";
 import { type Locale, withLocale } from "@/i18n/routing";
 
 declare global { interface Window { Plaid?: { create: (config: Record<string, unknown>) => { open: () => void } }; ethereum?: { request: (payload: { method: string; params?: unknown[] }) => Promise<unknown> } } }
@@ -52,13 +53,20 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(empty);
   const [plaidTransactions, setPlaidTransactions] = useState<PortfolioInvestmentTransaction[]>([]);
   const [address, setAddress] = useState("");
+  const [addressError, setAddressError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [portfolioUnavailable, setPortfolioUnavailable] = useState(false);
+  const [disconnectTarget, setDisconnectTarget] = useState<PortfolioConnection | null>(null);
+  const [disconnectError, setDisconnectError] = useState("");
+  const snapshotRequest = useRef(0);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pm, setPm] = useState<PmAccountView | null>(null);
   const [pmHistory, setPmHistory] = useState<PmNavHistory | null>(null);
   const [pmLoading, setPmLoading] = useState(true);
-  const loadPm = () => {
+  const loadPm = useCallback(() => {
+    setPmLoading(true);
     void getPmAccount()
       .then(setPm)
       .catch((reason: Error & { status?: number }) => {
@@ -68,14 +76,14 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
       })
       .finally(() => setPmLoading(false));
     void getPmNavHistory().then(setPmHistory).catch(() => setPmHistory(null));
-  };
+  }, []);
   const [range, setRange] = useState<"1D" | "1W" | "1M" | "ALL">("1M");
   // Control-plane trading NAV (server-computed; separate from aggregated portfolio NAV).
   const [tradingNav, setTradingNav] = useState<NavSnapshot | null>(null);
   const [tradingNavDaily, setTradingNavDaily] = useState<{ pnl: string | null; ret: string | null }>({ pnl: null, ret: null });
   const [tradingNavUnavailable, setTradingNavUnavailable] = useState(false);
   const [tradingEnv, setTradingEnv] = useState<string | null>(null);
-  const formatError = (reason: unknown): string => {
+  const formatError = useCallback((reason: unknown): string => {
     const raw = (reason as Error)?.message || String(reason);
     try {
       const parsed = JSON.parse(raw) as { detail?: { code?: string; plan?: string; active_count?: number; max_portfolios?: number; message?: string } | string };
@@ -97,12 +105,27 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
       if (typeof detail === "string") return detail;
     } catch { /* response was not JSON */ }
     return raw;
-  };
+  }, [zh]);
+  const loadPortfolio = useCallback(async () => {
+    const request = ++snapshotRequest.current;
+    setLoading(true);
+    try {
+      const next = await getPortfolioSnapshot(locale);
+      if (request !== snapshotRequest.current) return;
+      setPortfolioUnavailable(Boolean(next.unavailable));
+      // A failed refresh must not erase the last successfully loaded snapshot.
+      if (!next.unavailable) setPortfolio(next);
+    } catch {
+      if (request === snapshotRequest.current) setPortfolioUnavailable(true);
+    } finally {
+      if (request === snapshotRequest.current) setLoading(false);
+    }
+  }, [locale]);
   useEffect(() => {
     void getMe().catch((reason: Error & { status?: number }) => {
       if (reason.status === 401) router.replace(`${withLocale(locale, "/login")}?returnTo=${encodeURIComponent(withLocale(locale, "/portfolio"))}`);
     });
-    void getPortfolioSnapshot(locale).then(setPortfolio);
+    void loadPortfolio();
     void getPlaidInvestmentTransactions().then(({ transactions }) => setPlaidTransactions(transactions)).catch(() => undefined);
     loadPm();
     void getTradingSafetyStatus().then(({ safety }) => setTradingEnv(safety.static_gate.enabled ? "LIVE" : "LIVE_DISABLED")).catch(() => setTradingEnv(null));
@@ -125,22 +148,24 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
         setBusy("");
       });
     }
-  }, [locale, router, zh]);
+    return () => { snapshotRequest.current += 1; };
+  }, [locale, router, zh, loadPortfolio, loadPm, formatError]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void getPortfolioSnapshot(locale).then(setPortfolio).catch(() => undefined);
+      if (document.visibilityState === "visible" && !busy && !disconnectTarget) {
+        void loadPortfolio();
         void getPlaidInvestmentTransactions().then(({ transactions }) => setPlaidTransactions(transactions)).catch(() => undefined);
       }
     }, 60_000);
     return () => window.clearInterval(timer);
-  }, [locale]);
+  }, [locale, loadPortfolio, busy, disconnectTarget]);
 
   const connectPlaid = async (mode: PlaidConnectionMode) => {
+    if (busy || loading || portfolioUnavailable) return;
     setBusy(mode); setError("");
     if (!portfolio.providers.plaid) {
-      setError(zh ? "Plaid Production 尚未配置 Production Secret，暂时无法打开账户连接。" : "Plaid Production is missing its Production Secret, so account connection cannot open yet.");
+      setError(zh ? "银行账户连接暂时不可用，请选择其他连接方式或稍后重试。" : "Bank account connections are unavailable right now. Choose another connection method or try again later.");
       setBusy("");
       return;
     }
@@ -157,14 +182,22 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
     } catch (reason) { setError(formatError(reason)); setBusy(""); }
   };
   const connectHl = async () => {
+    if (busy || loading || portfolioUnavailable) return;
+    const publicAddress = address.trim();
+    setAddressError("");
+    if (!/^0x[0-9a-fA-F]{40}$/.test(publicAddress)) {
+      setAddressError(zh ? "请输入以 0x 开头、包含 40 个十六进制字符的公开地址。" : "Enter a public 0x address with 40 hexadecimal characters.");
+      return;
+    }
     setBusy("hyperliquid"); setError(""); setNotice("");
     try {
-      setPortfolio(await connectHyperliquid(address));
-      setNotice(zh ? `Hyperliquid 地址 ${address.slice(0, 6)}...${address.slice(-4)} 已连接。` : `Hyperliquid address ${address.slice(0, 6)}...${address.slice(-4)} connected.`);
+      setPortfolio(await connectHyperliquid(publicAddress));
+      setNotice(zh ? `Hyperliquid 地址 ${publicAddress.slice(0, 6)}...${publicAddress.slice(-4)} 已连接。` : `Hyperliquid address ${publicAddress.slice(0, 6)}...${publicAddress.slice(-4)} connected.`);
       setAddress("");
     } catch (reason) { setError(formatError(reason)); } finally { setBusy(""); }
   };
   const connectMetaMask = async () => {
+    if (busy || loading || portfolioUnavailable) return;
     setBusy("metamask"); setError(""); setNotice("");
     try {
       if (!window.ethereum) throw new Error(zh ? "未检测到 MetaMask 浏览器扩展。" : "MetaMask browser extension was not detected.");
@@ -181,7 +214,7 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
         } catch { /* keep the previous provider state */ }
       }
       if (!evmEnabled) {
-        throw new Error(zh ? "MetaMask 已连接，但多链资产索引尚未配置 MORALIS_API_KEY。" : "MetaMask connected, but MORALIS_API_KEY is not configured for multi-chain assets.");
+        throw new Error(zh ? "钱包已连接，但资产数据暂时不可用，请稍后重试。" : "Your wallet is connected, but asset data is unavailable right now. Please try again later.");
       }
       const chainHex = await window.ethereum.request({ method: "eth_chainId" }) as string;
       const chainId = Number.parseInt(chainHex, 16);
@@ -200,19 +233,35 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
     } catch (reason) { setError(formatError(reason)); } finally { setBusy(""); }
   };
   const syncAll = async () => {
+    if (busy || loading || portfolioUnavailable) return;
     setBusy("all"); setError(""); setNotice("");
-    const failures: string[] = [];
-    let latest: PortfolioSnapshot | null = null;
-    for (const connection of portfolio.connections) {
-      try { latest = await syncPortfolioAccount(connection.id); } catch (reason) { failures.push(`${connection.name}: ${formatError(reason)}`); }
-    }
-    if (latest) setPortfolio(latest);
-    else setPortfolio(await getPortfolioSnapshot(locale));
-    if (failures.length) setError(failures.join(" · "));
-    else setNotice(zh ? "全部账户已同步。" : "All accounts synchronized.");
-    setBusy("");
+    try {
+      const failures: string[] = [];
+      let latest: PortfolioSnapshot | null = null;
+      for (const connection of portfolio.connections) {
+        try { latest = await syncPortfolioAccount(connection.id); }
+        catch (reason) { failures.push(`${connection.name}: ${formatError(reason)}`); }
+      }
+      if (!latest) {
+        latest = await getPortfolioSnapshot(locale);
+        if (latest.unavailable) { setPortfolioUnavailable(true); throw new Error(zh ? "无法刷新组合数据，请重试。" : "Could not refresh portfolio data. Please try again."); }
+      }
+      setPortfolio(latest);
+      if (failures.length) setError(failures.join(" · "));
+      else setNotice(zh ? "全部账户已同步。" : "All accounts synchronized.");
+    } catch (reason) { setError(formatError(reason)); }
+    finally { setBusy(""); }
   };
-  const disconnect = async (id: string) => { setBusy(id); setError(""); try { setPortfolio(await disconnectPortfolioAccount(id)); } catch (reason) { setError(formatError(reason)); } finally { setBusy(""); } };
+  const disconnect = async () => {
+    if (!disconnectTarget || busy) return;
+    setBusy(`disconnect:${disconnectTarget.id}`); setDisconnectError(""); setNotice("");
+    try {
+      setPortfolio(await disconnectPortfolioAccount(disconnectTarget.id));
+      setNotice(zh ? `${disconnectTarget.name} 已断开。` : `${disconnectTarget.name} disconnected.`);
+      setDisconnectTarget(null);
+    } catch { setDisconnectError(zh ? "无法确认断开结果，请重试。" : "Could not confirm disconnection. Please try again."); }
+    finally { setBusy(""); }
+  };
 
   const money = (value: number) => value.toLocaleString(locale, { style: "currency", currency: "USD", maximumFractionDigits: value !== 0 && Math.abs(value) < 0.01 ? 6 : 2 });
   const signedMoney = (value: number) => `${value >= 0 ? "+" : "-"}${money(Math.abs(value))}`;
@@ -232,23 +281,26 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
     return top;
   })();
   const accountNav = new Map((portfolio.accounts ?? []).map((item) => [item.id, item]));
-  return <div className="space-y-5">
+  const operationBlocked = Boolean(busy) || loading || portfolioUnavailable;
+  return <div className="min-w-0 space-y-5">
+    {loading ? <div role="status" className="flex items-center gap-2 rounded-xl border border-border-pg p-4 text-sm text-text-pg-muted"><Loader2 className="h-4 w-4 animate-spin" aria-hidden />{zh ? "正在读取组合数据…" : "Loading your portfolio…"}</div> : null}
+    {portfolioUnavailable ? <div role="alert" className="rounded-xl border border-status-warning p-4 text-sm"><h2 className="font-semibold">{zh ? "无法读取你的组合数据" : "Unable to load your portfolio"}</h2><p className="mt-2 text-text-pg-muted">{portfolio.connected ? (zh ? "以下保留上次成功读取的数据。请刷新后再管理账户。" : "The last loaded figures remain below. Refresh before managing your accounts.") : (zh ? "暂时无法确认账户和余额，请重试。" : "Your accounts and balances could not be confirmed. Please try again.")}</p><button type="button" disabled={loading} onClick={() => { setError(""); void loadPortfolio(); }} className="mt-3 min-h-11 rounded-lg border border-border-pg px-3 py-2 text-sm disabled:opacity-50">{zh ? "重试组合数据" : "Retry portfolio"}</button></div> : null}
     <ResearchCard className="overflow-hidden p-0">
       <div className="p-5">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs font-semibold uppercase text-text-pg-muted">{zh ? "组合净值 NAV" : "Portfolio NAV"}</p>
-          {portfolio.connected ? <StatusBadge domain="data" value={portfolio.stale ? "stale" : "fresh"} locale={locale} /> : null}
+          {portfolio.connected ? <StatusBadge domain="data" value={portfolioUnavailable || portfolio.stale ? "stale" : "fresh"} locale={locale} /> : null}
           {tradingEnv ? <StatusBadge domain="trading" value={tradingEnv} locale={locale} /> : null}
-          {portfolio.connected ? <button type="button" onClick={() => void syncAll()} disabled={busy === "all"} className="ml-auto inline-flex h-7 items-center gap-1.5 border border-border-pg px-2 text-[10px] text-text-pg-muted hover:text-text-pg disabled:opacity-40 rounded-lg">{busy === "all" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}{zh ? "同步全部" : "Sync all"}</button> : null}
+          {portfolio.connected ? <button type="button" onClick={() => void syncAll()} disabled={operationBlocked} className="ml-auto inline-flex min-h-11 items-center gap-1.5 border border-border-pg px-3 text-xs text-text-pg-muted hover:text-text-pg disabled:opacity-40 rounded-lg">{busy === "all" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}{zh ? "同步全部" : "Sync all"}</button> : null}
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-          <p className="text-4xl font-semibold tracking-normal">{portfolio.connected ? money(portfolio.nav) : "--"}</p>
+          <p data-testid="portfolio-nav" className="text-4xl font-semibold tracking-normal">{portfolio.connected ? money(portfolio.nav) : "--"}</p>
           {portfolio.connected && (dailyChange !== 0 || dailyChangePct !== null && dailyChangePct !== undefined) ? <p className={`pb-1 text-sm font-medium ${dailyChange >= 0 ? "text-status-positive" : "text-status-negative"}`}>{signedMoney(dailyChange)} ({pct(dailyChangePct)}) · 24h</p> : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-5 text-xs text-text-pg-muted"><span>{zh ? "可用资金" : "Available"}: {portfolio.connected ? money(portfolio.available_cash) : "--"}</span>{portfolio.unrealized_pnl !== undefined && portfolio.unrealized_pnl !== null ? <span className={portfolio.unrealized_pnl >= 0 ? "text-status-positive" : "text-status-negative"}>{zh ? "未实现盈亏" : "Unrealized PnL"}: {portfolio.unrealized_pnl >= 0 ? "+" : ""}{money(portfolio.unrealized_pnl)}</span> : null}<span>{holdings.length} {zh ? "种资产" : "assets"} · {portfolio.connections.length} {zh ? "个账户" : "accounts"}</span>{portfolio.data_as_of ? <span>{zh ? "数据截至" : "As of"}: {new Date(portfolio.data_as_of).toLocaleString(locale)}</span> : null}</div>
-        <div className="mt-5 flex gap-1">{(["1D", "1W", "1M", "ALL"] as const).map((item) => <button key={item} type="button" onClick={() => setRange(item)} className={`h-7 min-w-11 px-2 font-mono text-[10px] ${range === item ? "bg-text-pg text-bg-app" : "text-text-pg-dim hover:bg-bg-panel-muted"}`}>{item}</button>)}</div>
+        <div role="group" aria-label={zh ? "净值时间范围" : "NAV time range"} className="mt-5 flex gap-1">{(["1D", "1W", "1M", "ALL"] as const).map((item) => <button key={item} type="button" onClick={() => setRange(item)} aria-pressed={range === item} className={`min-h-11 min-w-11 rounded-lg px-2 font-mono text-xs ${range === item ? "bg-text-pg text-bg-app" : "text-text-pg-dim hover:bg-bg-panel-muted"}`}>{item}</button>)}</div>
       </div>
-      {chartData.length > 1 ? <NavHistoryChart data={chartData} /> : <div className="grid h-56 place-items-center border-t border-border-pg text-sm text-text-pg-muted">{portfolio.nav_history.length > 1 ? (zh ? "该时间范围内暂无足够快照" : "Not enough snapshots in this range") : (zh ? "至少同步两次后显示真实净值曲线" : "The real NAV curve appears after at least two syncs")}</div>}
+      {chartData.length > 1 ? <NavHistoryChart data={chartData} /> : <div className="grid h-56 place-items-center border-t border-border-pg text-sm text-text-pg-muted">{portfolio.nav_history.length > 1 ? (zh ? "该时间范围内暂无足够快照" : "Not enough snapshots in this range") : (loading ? (zh ? "正在读取净值快照…" : "Loading NAV snapshots…") : portfolioUnavailable ? (zh ? "净值历史暂不可用" : "NAV history is unavailable") : (zh ? "至少同步两次后显示真实净值曲线" : "The real NAV curve appears after at least two syncs"))}</div>}
     </ResearchCard>
 
     {portfolio.connected && portfolio.stale ? <StaleDataBanner stale updatedAt={portfolio.data_as_of} locale={locale} onRefresh={() => void syncAll()} /> : null}
@@ -275,7 +327,7 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
         {tradingEnv ? <StatusBadge domain="trading" value={tradingEnv} locale={locale} /> : null}
       </div>
       {tradingNavUnavailable ? (
-        <div className="p-5 text-sm text-text-pg-muted">{zh ? "功能暂不可用：控制面 NAV 接口尚未开放，这里不会显示任何估算或占位数据。" : "Not available yet: the control-plane NAV endpoint has not been opened, so no estimates or placeholder figures are shown here."}</div>
+        <div className="p-5 text-sm text-text-pg-muted">{zh ? "交易账户估值暂不可用，请稍后重试。此处与上方组合估值分开显示。" : "Trading account valuation is unavailable right now. It is shown separately from the portfolio above."}</div>
       ) : tradingNav ? (
         <div className="p-5">
           <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
@@ -330,14 +382,15 @@ export function PortfolioConsole({ locale }: { locale: Locale }) {
       {plaidTransactions.length ? <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-xs"><thead><tr className="border-b border-border-pg text-left text-[10px] uppercase text-text-pg-dim"><th className="px-4 py-3 font-medium">{zh ? "日期" : "Date"}</th><th className="px-3 py-3 font-medium">{zh ? "活动" : "Activity"}</th><th className="px-3 py-3 font-medium">{zh ? "资产" : "Asset"}</th><th className="px-3 py-3 text-right font-medium">{zh ? "数量" : "Qty"}</th><th className="px-3 py-3 text-right font-medium">{zh ? "价格" : "Price"}</th><th className="px-3 py-3 text-right font-medium">{zh ? "金额" : "Amount"}</th><th className="px-4 py-3 text-right font-medium">{zh ? "费用" : "Fee"}</th></tr></thead><tbody className="divide-y divide-border-pg">{plaidTransactions.map((transaction) => <tr key={transaction.id} className={transaction.cancelled ? "text-text-pg-dim line-through" : ""}><td className="px-4 py-3 text-text-pg-muted">{new Date(`${transaction.date}T00:00:00`).toLocaleDateString(locale)}</td><td className="px-3 py-3"><div className="font-medium">{transaction.name}</div><div className="mt-0.5 text-[10px] uppercase text-text-pg-dim">{transaction.type}{transaction.subtype ? ` · ${transaction.subtype}` : ""}</div></td><td className="px-3 py-3">{transaction.symbol || "—"}</td><td className="px-3 py-3 text-right">{transaction.quantity ? quantity(transaction.quantity) : "—"}</td><td className="px-3 py-3 text-right">{transaction.price ? money(transaction.price) : "—"}</td><td className="px-3 py-3 text-right">{money(transaction.amount)}</td><td className="px-4 py-3 text-right">{transaction.fees ? money(transaction.fees) : "—"}</td></tr>)}</tbody></table></div> : <div className="p-5 text-sm text-text-pg-muted">{zh ? "正在准备 Plaid 交易历史。数据可用后将自动显示。" : "Plaid activity history is being prepared and will appear automatically when available."}</div>}
     </ResearchCard> : null}
 
-    <section><div className="mb-3 text-xs font-semibold uppercase text-text-pg-muted">{zh ? "连接账户" : "Connected accounts"}</div><div className="grid gap-3 lg:grid-cols-3">
-      <ProviderCard icon={<Building2 className="h-5 w-5" />} name="Plaid Investments" status={portfolio.providers.plaid ? undefined : "NEEDS CONFIG"} description={zh ? "连接券商、退休金和投资账户。" : "Connect brokerage, retirement, and investment accounts."} action={zh ? "连接 Plaid" : "Connect Plaid"} busy={busy === "plaid"} onClick={() => void connectPlaid("plaid")} disabled={false} />
-      <ProviderCard icon={<Link2 className="h-5 w-5" />} name="Interactive Brokers" status={portfolio.providers.plaid ? undefined : "NEEDS CONFIG"} description={zh ? "通过 Plaid 选择 Interactive Brokers LLC (US)，只读取账户和持仓。" : "Select Interactive Brokers LLC (US) in Plaid for read-only accounts and holdings."} action={zh ? "连接 IBKR（Plaid）" : "Connect IBKR with Plaid"} busy={busy === "ibkr"} onClick={() => void connectPlaid("ibkr")} disabled={false} />
-      <ResearchCard><div className="flex items-start justify-between"><Wallet className="h-5 w-5" /><span className="text-[10px] text-status-positive">PUBLIC API</span></div><h3 className="mt-4 font-semibold">Hyperliquid</h3><p className="mt-2 min-h-10 text-xs leading-5 text-text-pg-muted">{zh ? "使用公开钱包地址读取权益、Spot 与永续仓位。" : "Read equity, spot balances, and perpetual positions from a public wallet address."}</p><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="0x..." className="mt-4 h-10 w-full border border-border-pg bg-bg-app px-3 text-xs outline-none focus:border-border-pg-strong rounded-lg" /><button type="button" disabled={!address || busy === "hyperliquid"} onClick={connectHl} className="mt-2 h-10 w-full border border-border-pg-strong text-xs font-medium disabled:opacity-40 rounded-lg">{busy === "hyperliquid" ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : (zh ? "连接 Hyperliquid" : "Connect Hyperliquid")}</button><button type="button" disabled={busy === "metamask"} onClick={connectMetaMask} className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 border border-border-pg-strong text-xs font-medium disabled:opacity-40 rounded-lg">{busy === "metamask" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}{zh ? "连接 MetaMask" : "Connect MetaMask"}</button></ResearchCard>
+    <section aria-labelledby="portfolio-connect-title"><div className="mb-4"><h2 id="portfolio-connect-title" className="text-lg font-semibold">{zh ? "连接你的账户" : "Connect your accounts"}</h2><p className="mt-2 text-sm text-text-pg-muted">{zh ? "只读连接用于查看资产，不会授权交易或转账。" : "Read-only connections let you view assets without authorizing trades or transfers."}</p></div><div className="grid min-w-0 gap-3 lg:grid-cols-3">
+      <ProviderCard icon={<Building2 className="h-5 w-5" />} name="Plaid Investments" status={portfolioUnavailable ? (zh ? "暂不可用" : "Unavailable") : portfolio.providers.plaid ? undefined : (zh ? "暂未开放" : "Not available")} description={zh ? "连接券商、退休金和投资账户。" : "Connect brokerage, retirement, and investment accounts."} action={zh ? "连接 Plaid" : "Connect Plaid"} busy={busy === "plaid"} onClick={() => void connectPlaid("plaid")} disabled={operationBlocked || !portfolio.providers.plaid} />
+      <ProviderCard icon={<Link2 className="h-5 w-5" />} name="Interactive Brokers" status={portfolioUnavailable ? (zh ? "暂不可用" : "Unavailable") : portfolio.providers.plaid ? undefined : (zh ? "暂未开放" : "Not available")} description={zh ? "通过 Plaid 选择 Interactive Brokers LLC (US)，只读取账户和持仓。" : "Select Interactive Brokers LLC (US) in Plaid for read-only accounts and holdings."} action={zh ? "连接 IBKR（Plaid）" : "Connect IBKR with Plaid"} busy={busy === "ibkr"} onClick={() => void connectPlaid("ibkr")} disabled={operationBlocked || !portfolio.providers.plaid} />
+      <ResearchCard><div className="flex items-start justify-between"><Wallet className="h-5 w-5" /><span className="text-[10px] text-status-positive">PUBLIC API</span></div><h3 className="mt-4 font-semibold">Hyperliquid</h3><p className="mt-2 min-h-10 text-xs leading-5 text-text-pg-muted">{zh ? "使用公开钱包地址读取权益、Spot 与永续仓位。" : "Read equity, spot balances, and perpetual positions from a public wallet address."}</p><form noValidate onSubmit={(event) => { event.preventDefault(); void connectHl(); }} className="mt-4"><label htmlFor="portfolio-public-address" className="block text-xs font-medium">{zh ? "公开钱包地址" : "Public wallet address"}</label><input id="portfolio-public-address" value={address} onChange={(event) => { setAddress(event.target.value); setAddressError(""); }} disabled={operationBlocked} aria-invalid={Boolean(addressError)} aria-describedby="portfolio-address-error" autoComplete="off" spellCheck={false} placeholder="0x…" className="mt-2 min-h-11 w-full rounded-lg border border-border-pg bg-bg-app px-3 text-sm" /><p id="portfolio-address-error" role={addressError ? "alert" : undefined} className="mt-2 text-xs text-status-negative">{addressError}</p><button type="submit" disabled={operationBlocked || !portfolio.providers.hyperliquid} className="mt-2 h-10 w-full border border-border-pg-strong text-xs font-medium disabled:opacity-40 rounded-lg">{busy === "hyperliquid" ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : (zh ? "连接 Hyperliquid" : "Connect Hyperliquid")}</button></form><button type="button" disabled={operationBlocked || !portfolio.providers.evm} onClick={connectMetaMask} className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 border border-border-pg-strong text-xs font-medium disabled:opacity-40 rounded-lg">{busy === "metamask" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}{zh ? "连接 MetaMask" : "Connect MetaMask"}</button></ResearchCard>
     </div></section>
-    {notice ? <div className="border border-status-positive p-3 text-sm text-status-positive rounded-lg">{notice}</div> : null}
-    {error ? <div className="border border-status-negative p-3 text-sm text-status-negative rounded-lg">{error}</div> : null}
-    {portfolio.connections.length ? <ResearchCard><h2 className="font-semibold">{zh ? "同步状态" : "Sync status"}</h2><div className="mt-4 divide-y divide-border-pg">{portfolio.connections.map((connection) => { const summary = accountNav.get(connection.id); return <div key={connection.id} className="flex items-center gap-3 py-3 text-sm"><div className="min-w-0 flex-1"><div className="font-medium">{connection.name}</div><div className="mt-1 text-xs text-text-pg-dim">{connection.provider.toUpperCase()} · {connection.last_sync ? new Date(connection.last_sync).toLocaleString(locale) : (zh ? "未同步" : "Not synced")}{connection.error ? ` · ${connection.error}` : ""}</div></div>{summary ? <div className="hidden text-right sm:block"><div className="text-sm font-medium">{money(summary.nav)}</div><div className={`text-[10px] ${summary.daily_change >= 0 ? "text-status-positive" : "text-status-negative"}`}>{signedMoney(summary.daily_change)} · 24h</div></div> : null}<span className={connection.status === "CONNECTED" ? "text-xs text-status-positive" : "text-xs text-status-negative"}>{connection.status}</span>{connection.provider === "plaid" && connection.can_refresh ? <button type="button" onClick={() => void refreshPlaid(connection.id)} disabled={busy === `refresh:${connection.id}`} className="h-9 border border-border-pg px-2 text-[10px] text-text-pg-muted hover:text-text-pg disabled:opacity-40 rounded-lg" title={zh ? "请求 Plaid 投资更新" : "Request Plaid Investments Refresh"}>{busy === `refresh:${connection.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : (zh ? "更新" : "Refresh")}</button> : null}<button type="button" onClick={() => void sync(connection.id)} className="grid h-9 w-9 place-items-center border border-border-pg rounded-lg" title={zh ? "同步" : "Sync"}>{busy === connection.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}</button><button type="button" onClick={() => void disconnect(connection.id)} className="grid h-9 w-9 place-items-center border border-border-pg text-status-negative rounded-lg" title={zh ? "断开账户" : "Disconnect account"}><Trash2 className="h-4 w-4" /></button></div>; })}</div></ResearchCard> : null}
+    {notice ? <div role="status" className="border border-status-positive p-3 text-sm text-status-positive rounded-lg">{notice}</div> : null}
+    {error ? <div role="alert" className="border border-status-negative p-3 text-sm text-status-negative rounded-lg">{error}</div> : null}
+    {portfolio.connections.length ? <ResearchCard><h2 className="font-semibold">{zh ? "同步状态" : "Sync status"}</h2><div className="mt-4 divide-y divide-border-pg">{portfolio.connections.map((connection) => { const summary = accountNav.get(connection.id); return <div key={connection.id} className="flex flex-wrap items-center gap-3 py-3 text-sm"><div className="min-w-0 basis-full sm:basis-auto sm:flex-1"><div className="break-words font-medium">{connection.name}</div><div className="mt-1 text-xs text-text-pg-dim">{connection.provider.toUpperCase()} · {connection.last_sync ? new Date(connection.last_sync).toLocaleString(locale) : (zh ? "未同步" : "Not synced")}{connection.error ? ` · ${connection.error}` : ""}</div></div>{summary ? <div className="hidden text-right sm:block"><div className="text-sm font-medium">{money(summary.nav)}</div><div className={`text-[10px] ${summary.daily_change >= 0 ? "text-status-positive" : "text-status-negative"}`}>{signedMoney(summary.daily_change)} · 24h</div></div> : null}<span className={connection.status === "CONNECTED" ? "text-xs text-status-positive" : "text-xs text-status-negative"}>{connection.status}</span>{connection.provider === "plaid" && connection.can_refresh ? <button type="button" onClick={() => void refreshPlaid(connection.id)} disabled={operationBlocked} className="h-9 border border-border-pg px-2 text-[10px] text-text-pg-muted hover:text-text-pg disabled:opacity-40 rounded-lg" title={zh ? "请求 Plaid 投资更新" : "Request Plaid Investments Refresh"}>{busy === `refresh:${connection.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : (zh ? "更新" : "Refresh")}</button> : null}<button type="button" onClick={() => void sync(connection.id)} disabled={operationBlocked} aria-label={`${zh ? "同步" : "Sync"} ${connection.name}`} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg disabled:opacity-40 rounded-lg" title={zh ? "同步" : "Sync"}>{busy === connection.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}</button><button type="button" onClick={() => { setDisconnectError(""); setDisconnectTarget(connection); }} disabled={operationBlocked} aria-label={`${zh ? "断开" : "Disconnect"} ${connection.name}`} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg disabled:opacity-40 text-status-negative rounded-lg" title={zh ? "断开账户" : "Disconnect account"}><Trash2 className="h-4 w-4" /></button></div>; })}</div></ResearchCard> : null}
+    <OperationConfirmation open={Boolean(disconnectTarget)} title={zh ? "断开账户连接？" : "Disconnect account?"} target={disconnectTarget?.name || ""} description={zh ? "此账户将从组合视图移除，并停止自动同步。这不会转移资产或关闭券商账户，你可以稍后重新连接。" : "Remove this account from your portfolio and stop automatic sync. Assets and the brokerage account are unaffected; you can reconnect later."} confirmLabel={zh ? "断开连接" : "Disconnect account"} cancelLabel={zh ? "保留连接" : "Keep connection"} busy={Boolean(busy)} error={disconnectError} onCancel={() => { setDisconnectTarget(null); setDisconnectError(""); }} onConfirm={() => void disconnect()} />
     <PmAccountPanel view={pm} history={pmHistory} loading={pmLoading} locale={locale} onRefresh={loadPm} />
 
   </div>;
