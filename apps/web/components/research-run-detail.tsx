@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, RefreshCw, Quote } from "lucide-react";
+import { Markdown } from "@/components/markdown";
 import { CapabilityGate, useCapabilityGate } from "@/components/ocean/capability-gate";
 import { EvidenceGraph, type EvidenceNode } from "@/components/ocean/evidence-graph";
 import { OceanShell } from "@/components/ocean/ocean-shell";
 import { ResearchTimeline, stagesForStatus } from "@/components/ocean/research-timeline";
 import { StatusBadgeWithPulse } from "@/components/ocean/status-badge";
-import { apiBaseUrl, getResearchRun, getResearchRunArtifacts, getResearchRunEvidence, type HarnessResearchRun } from "@/lib/api";
+import { apiBaseUrl, getResearchRun, getResearchRunArtifacts, getResearchRunEvidence, type HarnessResearchRun, type HarnessResearchEvidence } from "@/lib/api";
 import { OCEAN_POLL_INTERVAL_ACTIVE_MS, OCEAN_POLL_INTERVAL_IDLE_MS } from "@/lib/ocean";
 import { type Locale, withLocale } from "@/i18n/routing";
 
@@ -31,21 +32,51 @@ function formatDuration(from: string, to: string, locale: "en" | "zh") {
   return locale === "zh" ? `${minutes} 分钟` : `${minutes} min`;
 }
 
+function sourceUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (value.startsWith("/") && !value.startsWith("//") && !value.includes("\\")) return value;
+  try { return ["https:", "http:"].includes(new URL(value).protocol) ? value : null; }
+  catch { return null; }
+}
+
 export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: string }) {
   const zh = locale === "zh";
   const load = useCallback(() => getResearchRun(runId), [runId]);
-  const { state, retry } = useCapabilityGate(load, [runId]);
-  const [run, setRun] = useState<HarnessResearchRun | null>(null);
+  const { state, retry, value } = useCapabilityGate(load, [runId]);
+  const [snapshot, setRun] = useState<HarnessResearchRun | null>(null);
+  const initialRun = value?.run?.id === runId ? value.run : null;
+  const run = snapshot?.id === runId ? snapshot : initialRun;
+  useEffect(() => { if (initialRun) setRun(initialRun); }, [initialRun]);
   const [evidenceNodes, setEvidenceNodes] = useState<EvidenceNode[]>([]);
-  const [artifacts, setArtifacts] = useState<{ id: string; type: string; title: string; url?: string | null }[]>([]);
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>("sse");
+  const [artifacts, setArtifacts] = useState<{ id: string; type: string; title: string; url?: string | null; markdown?: string | null }[]>([]);
+  const [evidence, setEvidence] = useState<HarnessResearchEvidence[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(true);
+  const [evidenceError, setEvidenceError] = useState(false);
+  const [artifactsError, setArtifactsError] = useState(false);
+  const [pollError, setPollError] = useState(false);
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>("polling");
   const sseControllerRef = useRef<AbortController | null>(null);
   const runRef = useRef<HarnessResearchRun | null>(null);
+  const currentRunId = useRef(runId);
+  currentRunId.current = runId;
   runRef.current = run;
+
+  useEffect(() => {
+    setRun(null);
+    setEvidence([]);
+    setEvidenceNodes([]);
+    setArtifacts([]);
+    setEvidenceLoading(true);
+    setEvidenceError(false);
+    setArtifactsError(false);
+    setPollError(false);
+    setConnectionMode("polling");
+  }, [runId]);
 
   const applyRun = useCallback((payload: { run?: HarnessResearchRun } | HarnessResearchRun | null) => {
     const next = (payload as { run?: HarnessResearchRun })?.run ?? (payload as HarnessResearchRun | null);
-    if (next) setRun(next);
+    if (next?.id === currentRunId.current) setRun(next);
   }, []);
 
   // Polling loop: authoritative server state. Connection trouble NEVER marks
@@ -59,10 +90,12 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
         const payload = await getResearchRun(runId);
         if (disposed) return;
         applyRun(payload);
+        setPollError(false);
         timer = window.setTimeout(poll, ACTIVE_STATUSES.has(payload.run.status) ? OCEAN_POLL_INTERVAL_ACTIVE_MS : OCEAN_POLL_INTERVAL_IDLE_MS);
       } catch {
         if (disposed) return;
         setConnectionMode("polling");
+        setPollError(true);
         timer = window.setTimeout(poll, OCEAN_POLL_INTERVAL_IDLE_MS);
       }
     };
@@ -71,7 +104,7 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [state.status, runId, applyRun]);
+  }, [state.status, runId, applyRun, refreshAttempt]);
 
   // SSE stream (frozen contract). Connected once per run while active.
   // Unknown events are ignored; disconnects fall back to polling silently.
@@ -83,6 +116,7 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
     sseControllerRef.current = controller;
     let settled = false;
     const finish = () => {
+      if (settled) return;
       settled = true;
       setConnectionMode("polling");
       controller.abort();
@@ -124,25 +158,25 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
             try {
               const data = JSON.parse(dataText) as { status?: string; updated_at?: string; message?: string };
               if (eventName === "run.state" && data.status) {
-                setRun((current) => (current ? { ...current, status: data.status as string, updated_at: data.updated_at || current.updated_at } : current));
+                setRun((current) => (current?.id === runId ? { ...current, status: data.status as string, updated_at: data.updated_at || current.updated_at } : current));
                 window.clearTimeout(idleTimeout);
               } else if (eventName === "run.completed") {
                 const payload = await getResearchRun(runId).catch(() => null);
                 if (payload) applyRun(payload);
-                else setRun((current) => (current ? { ...current, status: "completed" } : current));
+                else setRun((current) => (current?.id === runId ? { ...current, status: "completed" } : current));
                 finish();
               } else if (eventName === "run.failed") {
-                setRun((current) => (current ? { ...current, status: "failed", error_message: String(data.message ?? current.error_message ?? "") } : current));
+                setRun((current) => (current?.id === runId ? { ...current, status: "failed", error_message: String(data.message ?? current.error_message ?? "") } : current));
                 finish();
               } else if (eventName === "run.canceled") {
-                setRun((current) => (current ? { ...current, status: "canceled" } : current));
+                setRun((current) => (current?.id === runId ? { ...current, status: "canceled" } : current));
                 finish();
               }
             } catch { /* malformed payload: ignore */ }
           }
         }
       } catch {
-        setConnectionMode("polling");
+        if (!settled) setConnectionMode("polling");
       }
     })();
     return () => {
@@ -158,9 +192,12 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
     const current = runRef.current;
     if (!current) return;
     let cancelled = false;
+    setEvidenceLoading(true);
+    setEvidenceError(false);
     getResearchRunEvidence(runId)
       .then((payload) => {
         if (cancelled) return;
+        setEvidence(payload.evidence || []);
         const nodes: EvidenceNode[] = [];
         const byScope = new Map<string, { count: number; first: (typeof payload.evidence)[number] | undefined }>();
         for (const item of payload.evidence || []) {
@@ -180,29 +217,29 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
         nodes.push({ id: "citations", kind: "citation", label: zh ? "引用/来源" : "Citations", count: current.citation_count ?? evidence.filter((item) => item.url).length });
         setEvidenceNodes(nodes);
       })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [state.status, runId, run?.updated_at, zh]);
+      .catch(() => { if (!cancelled) setEvidenceError(true); })
+      .finally(() => { if (!cancelled) setEvidenceLoading(false); });
+    return () => { cancelled = true; };
+  }, [state.status, runId, run?.updated_at, zh, refreshAttempt]);
 
   useEffect(() => {
     if (state.status !== "available" || !runRef.current) return;
     let cancelled = false;
+    setArtifactsError(false);
     getResearchRunArtifacts(runId)
       .then((payload) => {
         if (!cancelled) setArtifacts(payload.artifacts || []);
       })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [state.status, runId, run?.status]);
+      .catch(() => { if (!cancelled) setArtifactsError(true); });
+    return () => { cancelled = true; };
+  }, [state.status, runId, run?.status, refreshAttempt]);
 
   return (
     <OceanShell locale={locale} variant="research" className="min-h-[calc(100dvh-7rem)] rounded-2xl">
       <div className="mx-auto max-w-5xl px-4 py-6 md:px-8">
         <CapabilityGate state={state} locale={locale} title={zh ? "Harness Research 暂不可用" : "Harness Research not available yet"} onRetry={retry}>
+          {pollError || evidenceError || artifactsError ? <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-bg-panel p-3 text-sm text-status-warning"><span>{zh ? "部分更新无法加载，正在显示上次确认的内容。" : "Some updates could not be loaded. Showing the last confirmed content."}</span><button type="button" onClick={() => setRefreshAttempt(value => value + 1)} className="inline-flex min-h-10 items-center gap-1.5 underline underline-offset-4"><RefreshCw className="h-3.5 w-3.5" aria-hidden />{zh ? "重新加载" : "Reload"}</button></div> : null}
+          {!run && !pollError ? <p role="status" className="text-sm text-text-pg-muted">{zh ? "正在加载研究任务…" : "Loading research run…"}</p> : null}
           {run ? (
             <div className="space-y-5">
               <header>
@@ -241,7 +278,8 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
 
               <section className="border border-border-pg bg-bg-panel p-4 md:p-5">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-pg-muted">{zh ? "证据关系" : "Evidence relationships"}</h2>
-                {evidenceNodes.length ? <EvidenceGraph nodes={evidenceNodes} locale={locale} /> : <p className="text-sm text-text-pg-muted">{zh ? "证据数据将在任务完成后显示。" : "Evidence will appear once the run produces it."}</p>}
+                {evidenceNodes.length ? <EvidenceGraph nodes={evidenceNodes} locale={locale} /> : <p className="text-sm text-text-pg-muted">{evidenceLoading ? (zh ? "正在加载证据…" : "Loading evidence…") : evidenceError ? (zh ? "证据暂未加载，请重试。" : "Evidence could not be loaded. Please retry.") : (zh ? "此任务尚未产生证据。" : "This run has not produced evidence yet.")}</p>}
+                {evidence.length ? <div className="mt-5 border-t border-border-pg pt-4"><h3 className="flex items-center gap-2 text-sm font-semibold"><Quote className="h-4 w-4" aria-hidden />{zh ? "可追溯来源" : "Traceable sources"}</h3><ol className="mt-3 divide-y divide-border-pg">{evidence.map((item, index) => <li key={item.id || `${item.provider}-${index}`} className="py-3"><div className="flex items-start gap-3"><span className="mt-0.5 text-xs tabular-nums text-text-pg-dim">[{item.citation_index ?? index + 1}]</span><div className="min-w-0 flex-1">{sourceUrl(item.url) ? <a href={sourceUrl(item.url)!} target="_blank" rel="noopener noreferrer" className="break-words text-sm font-medium underline decoration-border-pg underline-offset-4 hover:decoration-current">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</a> : <p className="break-words text-sm font-medium">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</p>}<p className="mt-1 text-xs leading-5 text-text-pg-dim">{item.provider || item.source_scope || (zh ? "来源未标注" : "Provider not recorded")} · {formatTime(item.fetched_at, locale)} · {item.is_verified === true ? (zh ? "已核验快照" : "Verified snapshot") : (zh ? "未核验快照" : "Unverified snapshot")}</p>{item.excerpt ? <p className="mt-2 break-words text-sm leading-6 text-text-pg-muted">{item.excerpt}</p> : null}{item.verification_note ? <p className="mt-1 text-xs leading-5 text-text-pg-muted">{item.verification_note}</p> : null}</div></div></li>)}</ol></div> : null}
               </section>
 
               <section className="border border-border-pg bg-bg-panel p-4 md:p-5">
@@ -249,27 +287,11 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
                 {run.summary ? (
                   <>
                     <p className="whitespace-pre-wrap text-sm leading-6 text-text-pg">{run.summary}</p>
-                    {artifacts.length ? (
-                      <ul className="mt-4 space-y-2 border-t border-border-pg pt-3">
-                        {artifacts.map((artifact) => (
-                          <li key={artifact.id} className="flex items-center gap-2 text-xs">
-                            <span className="border border-border-pg px-1.5 py-0.5 uppercase text-text-pg-muted">{artifact.type}</span>
-                            {artifact.url ? (
-                              <a href={artifact.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ocean-cyan hover:underline">
-                                <LinkIcon className="h-3 w-3" aria-hidden />
-                                {artifact.title}
-                              </a>
-                            ) : (
-                              <span className="text-text-pg-muted">{artifact.title}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
                   </>
                 ) : (
-                  <p className="text-sm text-text-pg-muted">{zh ? "研究结果尚未生成。" : "The research artifact has not been produced yet."}</p>
+                  <p className="text-sm text-text-pg-muted">{artifacts.length ? (zh ? "请在下方查看研究产出正文。" : "Read the research artifact below.") : (zh ? "研究结果尚未生成。" : "The research artifact has not been produced yet.")}</p>
                 )}
+                {artifacts.length ? <div className="mt-4 space-y-3 border-t border-border-pg pt-3">{artifacts.map((artifact, index) => <details key={artifact.id} open={index === 0} className="rounded-lg border border-border-pg bg-bg-app p-3"><summary className="cursor-pointer break-words text-sm font-medium">{artifact.title} <span className="ml-2 text-xs font-normal text-text-pg-dim">{artifact.type}</span></summary><div className="mt-3">{artifact.markdown ? <Markdown content={artifact.markdown} /> : sourceUrl(artifact.url) ? <a href={sourceUrl(artifact.url)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm underline underline-offset-4"><LinkIcon className="h-3.5 w-3.5" aria-hidden />{zh ? "打开研究产出" : "Open research artifact"}</a> : <p className="text-sm text-text-pg-muted">{zh ? "此产出尚无可显示的正文或链接。" : "No readable content or link has been recorded for this artifact."}</p>}</div></details>)}</div> : null}
                 <div className="mt-4 border-t border-border-pg pt-3">
                   <p className="text-xs leading-5 text-text-pg-muted">{run.disclaimer || (zh ? "研究结论未经人工验证，不构成事实断言或投资建议。任何自动交易建议仅作为研究结果 / 策略草案展示，不会直接执行。" : "Conclusions are not human-verified and are not factual assertions or investment advice. Any automated trading suggestion is shown strictly as research output / strategy draft and is never executed directly.")}</p>
                 </div>

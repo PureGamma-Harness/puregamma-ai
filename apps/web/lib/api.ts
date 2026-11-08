@@ -1658,8 +1658,8 @@ export async function transcribeSecretaryAudio(audio: Blob, locale: Locale, sign
   return response.json() as Promise<{ text: string; language: Locale }>;
 }
 
-export function createAgentConversation(title?: string) {
-  return requestStrict<{ conversation: AgentConversation }>("/api/agent/conversations", { method: "POST", body: JSON.stringify({ title }) });
+export function createAgentConversation(title?: string, signal?: AbortSignal) {
+  return requestStrict<{ conversation: AgentConversation }>("/api/agent/conversations", { method: "POST", body: JSON.stringify({ title }), signal });
 }
 
 export function deleteAgentConversation(id: string) {
@@ -2568,9 +2568,9 @@ export function deleteAgentAttachment(id: string) {
     method: "DELETE"
   });
 }
-export function setAgentPermission(id: string, permission_mode: AgentPermissionMode, acknowledge_full_access = false) {
+export function setAgentPermission(id: string, permission_mode: AgentPermissionMode, acknowledge_full_access = false, signal?: AbortSignal) {
   return requestStrict<{conversation: AgentConversation}>(`/api/agent/conversations/${encodeURIComponent(id)}`, {
-    method: "PATCH", body: JSON.stringify({permission_mode, acknowledge_full_access})
+    method: "PATCH", body: JSON.stringify({permission_mode, acknowledge_full_access}), signal
   });
 }
 export function approveAgentTool(id: string, decision: "approved" | "denied") {
