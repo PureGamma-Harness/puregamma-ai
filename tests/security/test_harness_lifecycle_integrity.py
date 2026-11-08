@@ -218,6 +218,7 @@ def test_cancel_losing_to_completion_does_not_refund_the_completed_run(sessions,
     "Finding [1], noncanonical source [01].", "Finding [1], unsupported group [1, 999].",
     "Finding [1], fullwidth source [９９９].", "Finding [1], signed source [+999].",
     "Finding [1], decimal source [1.0].", "Finding [1], unsupported range [1:999].",
+    "Finding [1], multiline group [1,\n999].", "Finding [1], multiline group [1,\r\n999].",
 ])
 def test_unknown_or_malformed_citations_cannot_validate_an_artifact(sessions, monkeypatch, content):
     gateway(monkeypatch, content)
