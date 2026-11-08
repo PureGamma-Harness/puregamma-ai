@@ -1294,7 +1294,7 @@ export function addWallet() {
 }
 
 export function getDataSources(locale: Locale = defaultLocale) {
-  return api<{ mockMode: boolean; sources: DataSourceRow[] }>("/admin/data-sources", { fallback: { mockMode: false, sources: [] }, locale });
+  return api<{ mockMode: boolean; sources: DataSourceRow[]; unavailable?: boolean; http_status?: number; error_code?: string }>("/admin/data-sources", { fallback: { mockMode: false, sources: [], unavailable: true }, locale });
 }
 
 export function syncDataSource(providerId: string) {

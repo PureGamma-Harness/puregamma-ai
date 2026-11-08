@@ -26,7 +26,7 @@ export default async function DataSourcesPage({ params: paramsPromise }: { param
         sectionNumber="04"
         actions={<Badge tone="neutral">{copy.batchScan}</Badge>}
       />
-      <DataSourceTable initialSources={data.sources} locale={locale} />
+      <DataSourceTable initialSources={data.sources} initialAvailability={{ unavailable: data.unavailable, http_status: data.http_status, error_code: data.error_code }} locale={locale} />
       <ResearchCard>
         <h2 className="mb-3 font-semibold">{copy.pipelineFlow}</h2>
         <ProcessStepper steps={copy.flow} />
