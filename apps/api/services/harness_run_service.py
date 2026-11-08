@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.exc import IntegrityError
 
 from apps.api.config import get_settings, normalize_deepseek_model
 from packages.database.models import (
@@ -35,6 +36,7 @@ from packages.database.models import (
     utcnow,
 )
 from packages.harness.adapter import artifact_content_hash
+from packages.harness.citations import CITATION_POLICY_VERSION, validate_citation_markers
 from packages.harness.composition import MINIMAL_CORDIS_COMPOSITION
 from packages.harness.state_machine import TERMINAL_STATES, transition_run
 from packages.harness.versions import PINNED_HARNESS_VERSIONS, compute_input_hash
@@ -53,7 +55,7 @@ DATA_SOURCE_EVENT_TYPES: dict[str, frozenset[str]] = {
 
 MAX_EVIDENCE_ITEMS = 12
 MAX_EVIDENCE_EXCERPT = 300
-MAX_GOAL_CHARS = 4000
+MAX_PROMPT_CHARS = 4000
 MAX_ARTIFACT_TOKENS = 1200
 
 
@@ -133,6 +135,7 @@ def create_harness_run(
     prompt: str,
     data_sources: list[str],
     skill: str,
+    retry_of: str | None = None,
 ) -> tuple[HarnessResearchRun, bool]:
     """Create (or idempotently return) a harness run. Returns (row, created)."""
     settings = get_settings()
@@ -153,19 +156,37 @@ def create_harness_run(
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("prompt is required")
+    if len(prompt) > MAX_PROMPT_CHARS:
+        raise ValueError(f"prompt must be at most {MAX_PROMPT_CHARS} characters")
 
-    goal = f"{name}\n{prompt}"[:MAX_GOAL_CHARS]
-    input_hash = compute_input_hash(goal)
+    # Empty means all supported sources; ordering and duplicates do not alter
+    # the research contract or create another billable reservation.
+    data_sources = sorted(set(data_sources) or HARNESS_DATA_SOURCES)
+    goal = f"{name}\n{prompt}"
+    input_hash = compute_input_hash(
+        goal, skill_version=skill,
+        extra={"data_sources": data_sources, "retry_of": retry_of},
+    )
     idempotency_key = f"harness:{user_id}:{input_hash}"
+    legacy_key = f"harness:{user_id}:{compute_input_hash(goal)}"
     existing = (
         db.query(HarnessResearchRun)
-        .filter(HarnessResearchRun.idempotency_key == idempotency_key)
-        .one_or_none()
+        .filter(HarnessResearchRun.user_id == user_id,
+                HarnessResearchRun.idempotency_key.in_([idempotency_key, legacy_key]))
+        .order_by(HarnessResearchRun.created_at.desc())
+        .all()
     )
-    if existing is not None:
-        if existing.status == "queued":
-            queue_harness_run(db, existing.id)
-        return existing, False
+    for candidate in existing:
+        usage = candidate.usage_json or {}
+        same_legacy_contract = (
+            retry_of is None and candidate.requested_goal_summary == goal
+            and sorted(set(usage.get("data_sources") or HARNESS_DATA_SOURCES)) == data_sources
+            and (usage.get("skill") or "harness_deep_research") == skill
+        )
+        if candidate.idempotency_key == idempotency_key or same_legacy_contract:
+            if candidate.status == "queued":
+                queue_harness_run(db, candidate.id)
+            return candidate, False
 
     from sqlalchemy import func
 
@@ -225,6 +246,7 @@ def create_harness_run(
         usage_json={
             "data_sources": data_sources,
             "skill": skill,
+            "retry_of": retry_of,
             "reservation_key": f"harness-run:{run_id}",
             "credits_estimate": quote.credits,
         },
@@ -295,13 +317,19 @@ def cancel_harness_run(db: Session, user_id: str, run_id: str) -> HarnessResearc
     if row.status in TERMINAL_STATES:
         raise HarnessStateConflict(f"cannot cancel a {row.status} research run")
     try:
-        transition_run(db, row, "canceled", reason="canceled by user", actor="user")
+        changed = transition_run(db, row, "canceled", reason="canceled by user", actor="user")
     except Exception:
         db.rollback()
         fresh = db.get(HarnessResearchRun, run_id)
         if fresh is not None and fresh.status == "canceled":
             return fresh
         raise
+    if not changed:
+        db.rollback()
+        db.refresh(row)
+        if row.status == "canceled":
+            return row
+        raise HarnessStateConflict(f"cannot cancel a {row.status} research run")
     _refund_run(db, row, "HARNESS_RUN_CANCELED")
     db.commit()
     return row
@@ -333,6 +361,7 @@ def retry_harness_run(db: Session, user_id: str, run_id: str) -> HarnessResearch
         prompt=prompt,
         data_sources=data_sources,
         skill=skill,
+        retry_of=row.id,
     )
     if new_row.status == "queued":
         queue_harness_run(db, new_row.id)
@@ -464,32 +493,59 @@ def _gather_evidence(db: Session, row: HarnessResearchRun) -> list[dict[str, Any
     return items
 
 
-def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
-    """Worker-side execution: preparing -> running -> validating -> terminal."""
-    settings = get_settings()
-    if run.status != "queued":
-        return serialize_harness_run(run)
+def _advance_run(
+    db: Session, run: HarnessResearchRun, expected: str, target: str, *, reason: str,
+) -> bool:
+    """Claim a stage from authoritative state; stop on cancellation/deadline.
 
+    The successful conditional UPDATE is committed by the caller together with
+    its stage data. A failed claim must never authorize side effects. No run
+    row lock is held during the external evidence/provider operation.
+    """
+    db.refresh(run)
+    if run.status != expected:
+        db.rollback()
+        db.refresh(run)
+        return False
     deadline = _aware(run.timeout_at)
-    if deadline is not None and utcnow() > deadline:
-        transition_run(db, run, "timed_out", reason="deadline passed before start", actor="orchestrator")
-        _refund_run(db, run, "HARNESS_RUN_TIMED_OUT")
-        db.commit()
-        return serialize_harness_run(run)
+    if deadline is not None and utcnow() >= deadline:
+        if transition_run(db, run, "timed_out", reason="research deadline exceeded", actor="orchestrator"):
+            run.error_summary = "Research deadline exceeded."
+            _refund_run(db, run, "HARNESS_RUN_TIMED_OUT")
+            db.commit()
+        else:
+            db.rollback()
+            db.refresh(run)
+        return False
+    if not transition_run(db, run, target, reason=reason, actor="orchestrator"):
+        db.rollback()
+        db.refresh(run)
+        return False
+    return True
 
-    # preparing ---------------------------------------------------------
-    transition_run(db, run, "preparing", reason="orchestrator accepted run", actor="orchestrator")
-    db.commit()
-    try:
-        evidence_items = _gather_evidence(db, run)
-    except Exception as exc:
-        transition_run(db, run, "failed", reason=f"evidence pipeline failed: {str(exc)[:200]}", actor="orchestrator")
-        _refund_run(db, run, "HARNESS_EVIDENCE_FAILED")
-        db.commit()
-        return serialize_harness_run(run)
 
+def _freeze_evidence_snapshot(
+    db: Session, run: HarnessResearchRun, evidence_items: list[dict[str, Any]],
+) -> EvidenceSnapshot:
+    """Reuse an identical immutable bundle only within its owner's scope.
+
+    The database deliberately deduplicates (owner, scope, hash). A savepoint
+    handles simultaneous inserts without discarding this worker's run claim.
+    Snapshot creation metadata is provenance, not authority to read another run.
+    """
     evidence_payload = json.dumps({"items": evidence_items}, ensure_ascii=True, sort_keys=True)
     evidence_hash = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
+
+    def existing() -> EvidenceSnapshot | None:
+        return db.query(EvidenceSnapshot).filter(
+            EvidenceSnapshot.user_id == run.user_id,
+            EvidenceSnapshot.source_scope == "run",
+            EvidenceSnapshot.content_hash == evidence_hash,
+        ).one_or_none()
+
+    snapshot = existing()
+    if snapshot is not None:
+        return snapshot
     snapshot = EvidenceSnapshot(
         user_id=run.user_id,
         schema_version="1.0",
@@ -502,12 +558,43 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
         source_timestamps_json=[],
         fetched_timestamps_json=[item["fetched_at"] for item in evidence_items],
         mock_fallback_flags_json=[False for _ in evidence_items],
-        authorization_context_json={"harness_run_id": run.id},
+        authorization_context_json={"created_by_harness_run_id": run.id},
     )
-    db.add(snapshot)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(snapshot)
+            db.flush()
+    except IntegrityError:
+        winner = existing()
+        if winner is None:
+            raise
+        return winner
+    return snapshot
+
+
+def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
+    """Worker-side execution: preparing -> running -> validating -> terminal."""
+
+    # preparing ---------------------------------------------------------
+    if not _advance_run(db, run, "queued", "preparing", reason="orchestrator accepted run"):
+        return serialize_harness_run(run)
+    db.commit()
+    try:
+        evidence_items = _gather_evidence(db, run)
+    except Exception as exc:
+        if _advance_run(db, run, "preparing", "failed", reason=f"evidence pipeline failed: {str(exc)[:200]}"):
+            run.error_summary = "Research evidence is unavailable. Please retry later."
+            _refund_run(db, run, "HARNESS_EVIDENCE_FAILED")
+            db.commit()
+        return serialize_harness_run(run)
+
+    # Claim dispatch before persisting a snapshot. A cancellation during
+    # evidence gathering must not leave a new snapshot or start a provider.
+    if not _advance_run(db, run, "preparing", "running", reason="evidence gathered; freezing dispatch input"):
+        return serialize_harness_run(run)
+    snapshot = _freeze_evidence_snapshot(db, run, evidence_items)
     run.evidence_snapshot_id = snapshot.id
-    run.evidence_snapshot_hash = evidence_hash
+    run.evidence_snapshot_hash = snapshot.content_hash
     usage = dict(run.usage_json or {})
     usage["evidence_count"] = len(evidence_items)
     usage["evidence_ids"] = [item["id"] for item in evidence_items]
@@ -515,8 +602,6 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
     db.commit()
 
     # running -----------------------------------------------------------
-    transition_run(db, run, "running", reason="evidence frozen; invoking gateway", actor="orchestrator")
-    db.commit()
     from packages.gateway.service import execute_chat
 
     system = (
@@ -541,19 +626,23 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
         input_tokens = int((result.usage.input_tokens if result.usage else 0) or 0)
         output_tokens = int((result.usage.output_tokens if result.usage else 0) or 0)
     except Exception as exc:
-        transition_run(db, run, "failed", reason=f"gateway call failed: {str(exc)[:200]}", actor="orchestrator")
-        _refund_run(db, run, "HARNESS_GATEWAY_FAILED")
-        db.commit()
+        if _advance_run(db, run, "running", "failed", reason=f"gateway call failed: {str(exc)[:200]}"):
+            run.error_summary = "Research provider request failed. Please retry later."
+            _refund_run(db, run, "HARNESS_GATEWAY_FAILED")
+            db.commit()
         return serialize_harness_run(run)
 
     # validating --------------------------------------------------------
-    transition_run(db, run, "validating", reason="citation verification", actor="orchestrator")
+    # A synchronous provider can finish after cancel/timeout; its late output
+    # is discarded before artifacts or settlement can be created.
+    if not _advance_run(db, run, "running", "validating", reason="citation verification"):
+        return serialize_harness_run(run)
     db.commit()
+    validation = validate_citation_markers(content, (item["citation_index"] for item in evidence_items))
     citations: list[dict[str, Any]] = []
     matched = 0
     for item in evidence_items:
-        marker = f"[{item['citation_index']}]"
-        if marker in content:
+        if item["citation_index"] in validation.referenced:
             matched += 1
             citations.append(
                 {
@@ -563,26 +652,28 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
                     "source_scope": item["source_scope"],
                 }
             )
-    # Honest completion: a run is only "completed" when it had evidence AND
-    # the model actually cited at least one item. No evidence or no citations
-    # => degraded, never silently verified.
+    # Reference integrity does not establish factual entailment. A valid
+    # subset is sufficient, but every authored numeric marker must resolve.
     if not evidence_items:
         final_status = "degraded"
         degraded_reason = "no evidence could be gathered for the requested data sources"
     elif matched == 0:
         final_status = "degraded"
         degraded_reason = "model produced no verifiable citations"
+    elif validation.unknown or validation.malformed:
+        final_status = "degraded"
+        degraded_reason = "model produced unknown or malformed evidence citations"
     else:
         final_status = "completed"
         degraded_reason = None
-    transition_run(
-        db,
-        run,
-        final_status,
+    if not _advance_run(
+        db, run, "validating", final_status,
         reason=f"validation done: {matched}/{len(evidence_items)} citations matched",
-        actor="orchestrator",
-    )
-    db.commit()
+    ):
+        return serialize_harness_run(run)
+    # Keep the final claim, artifact and settlement in one transaction. Never
+    # publish 'completed' before an artifact that may still fail to persist.
+    run.error_summary = degraded_reason
 
     # artifact + settlement ---------------------------------------------
     summary = content[:240]
@@ -596,14 +687,18 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
         markdown_rendering=content,
         citations_json=citations,
         methodology="Evidence-grounded gateway research with citation verification.",
-        assumptions_json=[{"statement": "All facts derive from the frozen evidence bundle."}],
-        limitations_json=[{"statement": "No out-of-evidence inference; conclusions unverified by humans."}],
+        assumptions_json=[{"statement": "References are checked against the frozen evidence bundle."}],
+        limitations_json=[{"statement": "Reference integrity is not factual verification; conclusions are unverified by humans."}],
         tool_run_summaries_json=[{"tool": "research_event_service", "stage": "evidence"}],
         artifact_file_refs_json=[],
         content_hash=artifact_content_hash(structured, content, citations),
         validation_result_json={
             "citations_matched": matched,
             "citations_total": len(evidence_items),
+            "citation_policy_version": CITATION_POLICY_VERSION,
+            "referenced_citation_indexes": list(validation.referenced),
+            "unknown_citation_indexes": list(validation.unknown),
+            "malformed_citation_markers": list(validation.malformed),
             "degraded_reason": degraded_reason,
             "route_provider": getattr(route, "provider", None).id if getattr(route, "provider", None) else None,
         },
@@ -647,7 +742,8 @@ def execute_queued_run(db: Session, run_id: str) -> dict[str, Any]:
         db.rollback()
         run = db.get(HarnessResearchRun, run_id)
         if run is not None and run.status not in TERMINAL_STATES:
-            transition_run(db, run, "failed", reason=f"orchestrator error: {str(exc)[:200]}", actor="orchestrator")
-            _refund_run(db, run, "HARNESS_ORCHESTRATOR_ERROR")
+            if transition_run(db, run, "failed", reason=f"orchestrator error: {str(exc)[:200]}", actor="orchestrator"):
+                run.error_summary = "Research execution could not complete. Please retry later."
+                _refund_run(db, run, "HARNESS_ORCHESTRATOR_ERROR")
             db.commit()
         return serialize_harness_run(run) if run is not None else {"id": run_id, "status": "failed"}
