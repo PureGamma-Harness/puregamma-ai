@@ -191,7 +191,7 @@ class _UpstreamStreamingResponse(StreamingResponse):
             await _close_upstream(self.client, self.upstream)
 
 
-def _request_path(request: Request) -> str:
+def _request_path(request: Request | WebSocket) -> str:
     """Use the ASGI application path with the router's mount-prefix semantics."""
     path = request.scope["path"]
     root_path = request.scope.get("root_path", "")
@@ -217,7 +217,7 @@ def _strip_raw_prefix(raw_path: bytes, prefix: str) -> bytes | None:
     return raw_path[offset:]
 
 
-def _upstream_url(request: Request) -> httpx.URL:
+def _upstream_url(request: Request | WebSocket) -> httpx.URL:
     path = _request_path(request)
     raw_path = request.scope.get("raw_path")
     if raw_path is not None and path != request.scope["path"]:
@@ -492,12 +492,8 @@ async def ws_proxy(websocket: WebSocket, path: str):
         await websocket.close(code=4403)
         return
     await websocket.accept()
-    scheme = "wss" if settings.web_target.startswith("https") else "ws"
-    target_host = settings.web_target.split("://", 1)[1]
-    target_uri = f"{scheme}://{target_host}/{path}"
-    query = str(websocket.query_params)
-    if query:
-        target_uri += "?" + query
+    target = _upstream_url(websocket)
+    target_uri = str(target.copy_with(scheme="wss" if target.scheme == "https" else "ws"))
     try:
         async with wsclient.connect(target_uri) as upstream:
             async def client_to_upstream():
@@ -515,7 +511,20 @@ async def ws_proxy(websocket: WebSocket, path: str):
                         await websocket.send_text(message)
                     else:
                         await websocket.send_bytes(message)
-            await asyncio.gather(client_to_upstream(), upstream_to_client())
+            # A normal EOF in either direction must cancel and join the other
+            # receiver, just as an error or cancellation does. A plain gather
+            # otherwise waits indefinitely on the still-open peer.
+            async with asyncio.TaskGroup() as forwards:
+                client_task = forwards.create_task(client_to_upstream())
+                upstream_task = forwards.create_task(upstream_to_client())
+                done, pending = await asyncio.wait(
+                    {client_task, upstream_task}, return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+            if upstream_task in done:
+                code = upstream.close_code if upstream.close_code in {1000, 1001} else 1000
+                await websocket.close(code=code)
     except Exception:
         try:
             await websocket.close(code=1011)
