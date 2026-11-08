@@ -34,8 +34,12 @@ whole-route health and mutation journeys as separate evidence.
 | Business operations | [Operations UI](ui-operations.md) | Confirmed destructive operations, unknown-versus-zero financial states, validated inputs, reliable filters and honest checkout messaging |
 | Agent retrieval | [RAG and context](rag-orchestration.md) | Consented structured memory, bounded lexical ranking, tenant idempotency, valid evidence JSON and owned current-turn history |
 | Research execution | [Harness](harness-quality.md) | Full request identity, stage claims, cancel/deadline handling, atomic terminal artifacts, owned immutable snapshots and numeric citation integrity |
+| Native tool evidence | [Harness tool output](harness-tool-output.md) | Real SDK evidence projection, actual sandbox state, provenance/health priority and explicit bounded omissions |
 | Chart reliability | [Charts](chart-reliability.md) | Announced loading/error, retry, per-attempt canvas ownership and bounded preview of actual supplied values |
 | Provider status | [Data sources](data-source-status.md) | Preserve server availability and distinguish empty, unauthorized and failed reads without enabling a provider |
+| Route recovery | [Scoped recovery](route-recovery.md) | Renderable admin errors, daily settings recovery with Next control signals preserved, single API/advisory main landmarks |
+| Legacy navigation | [Query preservation](legacy-query-preservation.md) | Preserve repeated, empty and Unicode query values across all locale aliases without changing API handling or release gates |
+| Layout containment | [Route geometry](route-geometry.md) | Contain secretary artwork and wrap long backtest errors at desktop/mobile widths |
 | Full-route quality | [Route quality](route-quality.md) | Production route discovery, English/Chinese, desktop/390px, legacy redirects, SSR sessions and separate full/default-launch gates |
 
 The small integration follow-up to `EvidenceGraph` renders a noninteractive
@@ -54,6 +58,16 @@ The route-health suite has 228 discovered cases per mode; the full mode includes
 216 canonical visits across both locales and viewports. Actual pass counts and
 any fixture corrections are recorded only after the final integrated artifacts
 run. A scoped unavailable state is distinct from a working external provider.
+
+The first frozen full-mode audit ran all 228 cases and exposed alias query loss,
+admin error rendering, missing daily settings recovery, duplicate main landmarks
+and two layout overflows. Those findings have explicit repairs and independent
+reviews. A Chinese embedded-docs shell needs a dedicated semantic check instead
+of an arbitrary English-oriented text-length threshold. The original auth
+sequence also recorded one initial-load hydration error; the unmodified complete
+16-case sequence subsequently passed and bounded diagnostic attempts did not
+reproduce it. Final acceptance uses fresh artifacts, with the initial evidence
+retained instead of labeling that transient error as a proven code fix.
 
 Backend source was frozen for a full 1523-pass regression with four pre-existing
 expected failures and one opt-in load skip. A later one-line citation-parser
