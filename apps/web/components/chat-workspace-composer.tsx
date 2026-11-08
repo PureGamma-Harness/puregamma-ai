@@ -41,7 +41,7 @@ export function AttachmentCards({ files, locale, onRemove }: { files: AgentAttac
 
 type Props = {
   locale: Locale; input: string; onInput: (value: string) => void;
-  busy: boolean; onSend: () => void; onStop: () => void;
+  busy: boolean; disabled?: boolean; onSend: () => void; onStop: () => void;
   attachments: AgentAttachment[]; onAttachments: (files: AgentAttachment[]) => void;
   permission: AgentPermissionMode; onPermission: (value: AgentPermissionMode, acknowledged: boolean) => Promise<void>;
   modelControl: ReactNode; researchMode: boolean; onResearch: (value: boolean) => void; settings: ReactNode;
@@ -68,7 +68,7 @@ export function ChatWorkspaceComposer(p: Props) {
   useEffect(() => { if (textarea.current) { textarea.current.style.height = "auto"; textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 200)}px`; } }, [p.input]);
 
   async function add(files: File[]) {
-    if (p.busy || uploadLock.current || !limits) return;
+    if (p.disabled || p.busy || uploadLock.current || !limits) return;
     setError("");
     if (filesRef.current.length + files.length > limits.max_files) { setError(t.limit); return; }
     uploadLock.current = true; p.onUploading(true);
@@ -131,18 +131,18 @@ export function ChatWorkspaceComposer(p: Props) {
     {removing ? <div className="flex items-center gap-2 py-1 text-sm" role="status"><Loader2 className="h-4 w-4 animate-spin" />{t.removing} · {p.attachments.find(item => item.id === removing)?.name || ""}</div> : null}
     {uploading ? <div className="flex items-center gap-2 py-2 text-sm" role="status"><Loader2 className="h-4 w-4 animate-spin" />{t.uploading} · {uploading}</div> : null}
     {failed.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center gap-2 py-1 text-sm text-status-negative"><span className="min-w-0 flex-1 truncate">{t.failed}: {file.name}</span><button disabled={!!uploading || p.busy} type="button" className="p-2" onClick={() => void add([file])} aria-label={`${t.retry}: ${file.name}`}><RotateCcw className="h-4 w-4" /></button><button type="button" className="p-2" onClick={() => setFailed(current => current.filter(item => item !== file))} aria-label={`${t.remove}: ${file.name}`}><X className="h-4 w-4" /></button></div>)}
-    <form onSubmit={event => { event.preventDefault(); if (!uploadLock.current && !changing && !failed.length) p.onSend(); }} className="rounded-xl bg-[var(--pg-surface-raised)] p-3 shadow-sm focus-within:ring-2 focus-within:ring-[var(--pg-focus-ring)]">
-      <textarea ref={node => { textarea.current = node; p.onTextarea?.(node); }} value={p.input} onChange={event => p.onInput(event.target.value)} rows={2} aria-label={t.placeholder} placeholder={t.placeholder} data-testid="chat-composer-input"
+    <form onSubmit={event => { event.preventDefault(); if (!p.disabled && !uploadLock.current && !changing && !failed.length) p.onSend(); }} className="rounded-xl bg-[var(--pg-surface-raised)] p-3 shadow-sm focus-within:ring-2 focus-within:ring-[var(--pg-focus-ring)]">
+      <textarea ref={node => { textarea.current = node; p.onTextarea?.(node); }} value={p.input} disabled={p.disabled} onChange={event => p.onInput(event.target.value)} rows={2} aria-label={t.placeholder} placeholder={t.placeholder} data-testid="chat-composer-input"
         onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); void add(Array.from(event.clipboardData.files)); } }}
-        onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!uploadLock.current && !changing && !failed.length) p.onSend(); } }}
+        onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!p.disabled && !uploadLock.current && !changing && !failed.length) p.onSend(); } }}
         className="block min-h-16 w-full resize-none bg-transparent px-1 py-2 text-base leading-6 text-text-pg outline-none" />
       <div className="flex flex-wrap items-center gap-1.5">
         <input ref={input} type="file" multiple accept={limits?.file_types.map(ext => `.${ext}`).join(",")} className="hidden" onChange={event => void add(Array.from(event.target.files || []))} />
-        <button type="button" disabled={p.busy || !!uploading || !limits} onClick={() => input.current?.click()} aria-label={t.add} title={limits ? `${limits.max_files} files · ${limits.max_file_bytes / 1048576} MB/file` : t.unavailable} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-[var(--pg-surface-hover)] disabled:opacity-40"><Paperclip className="h-5 w-5" /></button>
+        <button type="button" disabled={p.disabled || p.busy || !!uploading || !limits} onClick={() => input.current?.click()} aria-label={t.add} title={limits ? `${limits.max_files} files · ${limits.max_file_bytes / 1048576} MB/file` : t.unavailable} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-[var(--pg-surface-hover)] disabled:opacity-40"><Paperclip className="h-5 w-5" /></button>
         <div className="min-w-0 max-w-full">{p.modelControl}</div>
-        <label className="flex min-w-0 items-center gap-1 text-xs text-text-pg-muted" title={t.scope}><ShieldCheck className="h-4 w-4 shrink-0" /><span className="sr-only">{t.permission}</span><select aria-label={t.permission} disabled={p.busy || changing} value={p.permission} onChange={event => void changePermission(event.target.value as AgentPermissionMode)} className="min-h-10 max-w-full rounded-md bg-transparent text-text-pg focus-visible:ring-2"><option value="read-only">{t.read}</option><option value="workspace-write">{t.ask}</option><option value="full-access">{t.full}</option></select></label>
-        <button type="button" disabled={p.busy} onClick={() => p.onResearch(!p.researchMode)} aria-pressed={p.researchMode} className="min-h-10 rounded-md px-2 text-xs text-text-pg-muted hover:bg-[var(--pg-surface-hover)]">{p.researchMode ? t.research : t.online}</button>
-        <div className="ml-auto">{p.busy ? <button type="button" onClick={p.onStop} aria-label={t.stop} className="grid h-11 w-11 place-items-center rounded-lg text-status-negative"><Square className="h-5 w-5" /></button> : <button type="submit" disabled={(!p.input.trim() && !p.attachments.length) || !!uploading || changing || !!failed.length} aria-label={t.send} className="grid h-11 w-11 place-items-center rounded-lg bg-[var(--pg-surface-inverse)] text-[var(--pg-text-inverse)] disabled:opacity-40"><ArrowUp className="h-5 w-5" /></button>}</div>
+        <label className="flex min-w-0 items-center gap-1 text-xs text-text-pg-muted" title={t.scope}><ShieldCheck className="h-4 w-4 shrink-0" /><span className="sr-only">{t.permission}</span><select aria-label={t.permission} disabled={p.disabled || p.busy || changing} value={p.permission} onChange={event => void changePermission(event.target.value as AgentPermissionMode)} className="min-h-10 max-w-full rounded-md bg-transparent text-text-pg focus-visible:ring-2"><option value="read-only">{t.read}</option><option value="workspace-write">{t.ask}</option><option value="full-access">{t.full}</option></select></label>
+        <button type="button" disabled={p.disabled || p.busy} onClick={() => p.onResearch(!p.researchMode)} aria-pressed={p.researchMode} className="min-h-10 rounded-md px-2 text-xs text-text-pg-muted hover:bg-[var(--pg-surface-hover)]">{p.researchMode ? t.research : t.online}</button>
+        <div className="ml-auto">{p.busy ? <button key="stop" type="button" onClick={event => { event.preventDefault(); p.onStop(); }} aria-label={t.stop} className="grid h-11 w-11 place-items-center rounded-lg text-status-negative"><Square className="h-5 w-5" /></button> : <button key="send" type="submit" disabled={p.disabled || (!p.input.trim() && !p.attachments.some(file => !file.removed)) || !!uploading || changing || !!failed.length} aria-label={t.send} className="grid h-11 w-11 place-items-center rounded-lg bg-[var(--pg-surface-inverse)] text-[var(--pg-text-inverse)] disabled:opacity-40"><ArrowUp className="h-5 w-5" /></button>}</div>
       </div>
     </form>
     {error ? <p role="alert" className="mt-2 text-sm text-status-negative">{error} <button onClick={() => setError("")} aria-label={t.remove} type="button" className="p-1">×</button></p> : null}

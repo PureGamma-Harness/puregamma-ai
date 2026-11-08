@@ -59,16 +59,20 @@ function bylineModelLabel(model: string | null | undefined, copy: ModelUpgradeCo
   return id;
 }
 
-export function AgentChat({ locale, initialConversationId }: { locale: Locale; initialConversationId?: string }) {
+export function AgentChat({ locale, initialConversationId, initialPrompt = "" }: { locale: Locale; initialConversationId?: string; initialPrompt?: string }) {
   const router = useRouter();
   const zh = locale === "zh";
   const modelCopy = getMessageNamespace(locale, "model-upgrade");
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [conversationId, setConversationId] = useState(initialConversationId || "");
   const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialPrompt);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [historyAction, setHistoryAction] = useState("");
+  const [historyError, setHistoryError] = useState("");
+  const historyActionRef = useRef(false);
+  const interactionVersion = useRef(0);
   const [failure, setFailure] = useState<ChatFailure | null>(null);
   const [toolStatus, setToolStatus] = useState<Array<{ id: string; tool: string; status: string }>>([]);
   const [toolResults, setToolResults] = useState<Array<{ tool: string; data: Record<string, unknown> }>>([]);
@@ -120,7 +124,9 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setMobileHistoryOpen(false);
+        historyTriggerRef.current?.focus();
         return;
       }
       // Keep Tab inside the open drawer.
@@ -214,44 +220,69 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
     if (followRef.current) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, toolStatus]);
 
-  const createNew = async () => {
-    if (busy || uploading) return;
+  const updateHistory = async (action: string, operation: () => Promise<void>) => {
+    if (busy || uploading || loading || historyActionRef.current) return;
+    historyActionRef.current = true;
+    interactionVersion.current += 1;
+    setHistoryAction(action);
+    setHistoryError("");
+    try { await operation(); }
+    catch { setHistoryError(zh ? "无法更新历史对话。已有内容未丢失，请稍后重试。" : "Conversation history could not be updated. Your existing content is kept; please try again."); }
+    finally { historyActionRef.current = false; setHistoryAction(""); }
+  };
+
+  const selectConversation = (id: string) => updateHistory(`open:${id}`, async () => {
+    await openConversation(id);
+    router.push(withLocale(locale, `/chat/${id}`));
+    closeMobileHistory();
+  });
+
+  const createNew = () => updateHistory("create", async () => {
+    const result = await createAgentConversation();
     setPermission("workspace-write");
     setApproval(null);
-    const result = await createAgentConversation();
-    setConversations((current) => [result.conversation, ...current]);
+    setFailure(null);
+    setConversations(current => [result.conversation, ...current]);
     setConversationId(result.conversation.id);
     setMessages([]);
     router.push(withLocale(locale, `/chat/${result.conversation.id}`));
-  };
+    closeMobileHistory();
+    composerRef.current?.focus();
+  });
 
   const deleteConversation = async (id: string) => {
-    setConversations((current) => current.filter((conversation) => conversation.id !== id));
-    if (conversationId === id) {
-      const remaining = conversations.filter((conversation) => conversation.id !== id);
-      if (remaining.length) {
-        router.push(withLocale(locale, `/chat/${remaining[0].id}`));
-        openConversation(remaining[0].id);
-      } else {
+    if (!window.confirm(zh ? "删除此会话及其消息？此操作不可撤销。" : "Delete this conversation and its messages? This cannot be undone.")) return;
+    await updateHistory(`delete:${id}`, async () => {
+      await deleteAgentConversation(id);
+      const remaining = conversations.filter(conversation => conversation.id !== id);
+      setConversations(remaining);
+      if (conversationId === id) {
         setConversationId("");
         setMessages([]);
+        setApproval(null);
+        setFailure(null);
         router.push(withLocale(locale, "/chat"));
       }
-    }
-    deleteAgentConversation(id).catch(() => {});
+    });
   };
 
   const deleteAll = async () => {
-    setConversations([]);
-    setConversationId("");
-    setMessages([]);
-    router.push(withLocale(locale, "/chat"));
-    deleteAllAgentConversations().catch(() => {});
+    if (!window.confirm(zh ? "删除全部历史对话及消息？此操作不可撤销。" : "Delete all conversation history and messages? This cannot be undone.")) return;
+    await updateHistory("delete-all", async () => {
+      await deleteAllAgentConversations();
+      setConversations([]);
+      setConversationId("");
+      setMessages([]);
+      setApproval(null);
+      setFailure(null);
+      router.push(withLocale(locale, "/chat"));
+    });
   };
 
-  const ensureConversation = async () => {
+  const ensureConversation = async (signal: AbortSignal) => {
     if (conversationId) return conversationId;
-    const result = await createAgentConversation();
+    const result = await createAgentConversation(undefined, signal);
+    if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     setConversationId(result.conversation.id);
     setConversations((current) => [result.conversation, ...current]);
     window.history.replaceState(null, "", withLocale(locale, `/chat/${result.conversation.id}`));
@@ -266,8 +297,9 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
     const content = input.trim() || (outgoing.length ? (zh ? "请分析所附文件。" : "Please analyze the attached files.") : "");
     // A ref, not just the `busy` state: two submissions in the same tick would
     // both read the pre-update state and start two runs.
-    if (!content || busy || uploading || sendingRef.current) return;
+    if (!content || busy || uploading || loading || historyActionRef.current || sendingRef.current) return;
     sendingRef.current = true;
+    interactionVersion.current += 1;
     setBusy(true);
     setFailure(null);
     setToolStatus([]);
@@ -281,16 +313,20 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
     let completed = false;
     /** True once an SSE event reported the run's own failure and its billing. */
     let failureReported = false;
+    // One controller owns setup and streaming, so Stop also cancels a pending
+    // conversation/permission request before a chargeable message can start.
+    const controller = new AbortController();
+    controllerRef.current = controller;
     try {
-      const id = await ensureConversation();
-      await setAgentPermission(id, permission, permission === "full-access");
+      const id = await ensureConversation(controller.signal);
+      if (controller.signal.aborted) throw new DOMException("Stopped", "AbortError");
+      await setAgentPermission(id, permission, permission === "full-access", controller.signal);
+      if (controller.signal.aborted) throw new DOMException("Stopped", "AbortError");
       setInput("");
       const now = new Date().toISOString();
       const skillRefs: SkillContextRef[] = skillCatalog.filter((skill) => skills.includes(skill.skill_id)).map((skill) => ({ skill_id: skill.skill_id, slug: skill.slug, version: skill.current_version, installation_id: skill.installation_id }));
       const context = { research_mode: researchMode, data_sources: researchMode ? dataSources : [], skills: researchMode ? skillRefs : [], skill_refs: researchMode ? skillRefs : [], custom_prompt: researchMode ? customPrompt : "", attachments: outgoing, model: selectedModel, permission_mode: permission };
       setMessages((current) => [...current, { id: `local-${Date.now()}`, conversation_id: id, role: "user", content, status: "completed", input_tokens: 0, output_tokens: 0, created_at: now, context, sources: [] }]);
-      const controller = new AbortController();
-      controllerRef.current = controller;
       await streamAgentMessage(id, content, locale, controller.signal, ({ event: eventName, data }) => {
         if (eventName === "run.started") {
           activeRunRef.current = String(data.runId || "");
@@ -386,6 +422,10 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
     } catch (reason) {
       if ((reason as Error).name === "AbortError") {
         // The user stopped the run; that is a normal outcome, not an error.
+      } else if (failureReported) {
+        // Preserve the run's authoritative settlement when a later refresh fails.
+      } else if (completed) {
+        setHistoryError(zh ? "回复已完成，但无法刷新历史或积分。请稍后刷新查看。" : "The answer completed, but history or credits could not be refreshed. Refresh again shortly.");
       } else if (assistantId && !completed) {
         // The response body died mid-stream. The backend *settles* the tokens
         // already produced on a client disconnect, so this states no billing
@@ -393,6 +433,8 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
         setMessages((current) => current.map((message) => message.id === assistantId && message.status === "streaming" ? { ...message, status: "failed" } : message));
         setFailure(describeChatFailure(locale, reason, { kind: "stream_interrupted" }));
       } else {
+        // Restoring a draft is not a replay: only another explicit Send starts a run.
+        setInput(current => current || content);
         setFailure(describeChatFailure(locale, reason));
       }
     } finally {
@@ -406,15 +448,23 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
   };
 
   const stop = async () => {
-    if (activeRunRef.current) await cancelAgentRun(activeRunRef.current).catch(() => undefined);
+    const version = interactionVersion.current;
+    const id = conversationId;
+    const runId = activeRunRef.current;
+    // The local stream stops immediately. A slow cancellation or reload must
+    // never clear a newer run or replace a newly selected conversation.
     controllerRef.current?.abort();
-    setBusy(false);
-    if (conversationId) {
+    if (runId) {
+      try { await cancelAgentRun(runId); }
+      catch { if (version === interactionVersion.current) setHistoryError(zh ? "已停止显示回复，但无法确认任务已取消。请查看用量记录后再试。" : "The response stopped locally, but run cancellation could not be confirmed. Check usage before trying again."); }
+    }
+    if (id && version === interactionVersion.current) {
       try {
-        const refreshed = await getAgentConversation(conversationId);
+        const [refreshed, refreshedQuota] = await Promise.all([getAgentConversation(id), getAgentQuota().catch(() => null)]);
+        if (version !== interactionVersion.current) return;
         setMessages(refreshed.messages);
-        setQuota(await getAgentQuota().catch(() => quota));
-      } catch { /* keep current view when refresh fails */ }
+        if (refreshedQuota) setQuota(refreshedQuota);
+      } catch { /* Preserve the last view when refresh fails. */ }
     }
   };
 
@@ -491,24 +541,25 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
           <div className="flex items-center gap-1">
             <button type="button" onClick={() => setHistoryCollapsed(true)} className="hidden h-9 w-9 place-items-center border border-border-pg hover:border-border-pg-strong rounded-lg lg:grid" aria-label={zh ? "收起历史对话" : "Collapse conversation history"}><PanelLeftClose className="h-4 w-4" /></button>
             <button type="button" onClick={closeMobileHistory} className="grid h-9 w-9 place-items-center border border-border-pg hover:border-border-pg-strong rounded-lg lg:hidden" aria-label={zh ? "关闭历史对话" : "Close conversation history"}><X className="h-4 w-4" /></button>
-            <button type="button" onClick={createNew} className="grid h-9 w-9 place-items-center border border-border-pg hover:border-border-pg-strong rounded-lg" aria-label={zh ? "新会话" : "New conversation"}><MessageSquarePlus className="h-4 w-4" /></button>
+            <button type="button" onClick={() => void createNew()} disabled={busy || uploading || loading || !!historyAction} className="grid h-9 w-9 place-items-center border border-border-pg hover:border-border-pg-strong rounded-lg" aria-label={zh ? "新会话" : "New conversation"}><MessageSquarePlus className="h-4 w-4" /></button>
           </div>
         </div>
+        {mobileHistoryOpen && historyError ? <p role="alert" className="border-b border-status-warning/30 p-3 text-sm leading-5 text-status-warning">{historyError}</p> : null}
         <div className="flex-1 overflow-y-auto p-2 lg:space-y-1">
           {conversations.map((conversation) => (
             <div key={conversation.id} className="group flex items-center">
-              <button type="button" onClick={() => { router.push(withLocale(locale, `/chat/${conversation.id}`)); openConversation(conversation.id); setMobileHistoryOpen(false); }} className={`min-w-0 flex-1 border px-3 py-2 text-left text-sm  rounded-lg ${conversation.id === conversationId ? "border-border-pg-strong bg-bg-panel-muted" : "border-transparent text-text-pg-muted hover:border-border-pg"}`}>
+              <button type="button" onClick={() => void selectConversation(conversation.id)} disabled={busy || uploading || loading || !!historyAction} aria-current={conversation.id === conversationId ? "page" : undefined} className={`min-w-0 flex-1 border px-3 py-2 text-left text-sm  rounded-lg ${conversation.id === conversationId ? "border-border-pg-strong bg-bg-panel-muted" : "border-transparent text-text-pg-muted hover:border-border-pg"}`}>
                 <div className="truncate font-medium">{conversation.title}</div>
                 <div className="mt-1 text-xs text-text-pg-dim">{new Date(conversation.updated_at).toLocaleDateString(locale)}</div>
               </button>
-              <button type="button" onClick={(event) => { event.stopPropagation(); void deleteConversation(conversation.id); }} aria-label={zh ? "删除会话" : "Delete conversation"} className="ml-0.5 grid h-9 w-8 shrink-0 place-items-center border border-transparent text-text-pg-dim hover:border-status-negative hover:text-status-negative lg:invisible lg:group-hover:visible rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={(event) => { event.stopPropagation(); void deleteConversation(conversation.id); }} disabled={busy || uploading || loading || !!historyAction} aria-label={`${zh ? "删除会话" : "Delete conversation"}: ${conversation.title}`} className="ml-0.5 grid h-9 w-8 shrink-0 place-items-center border border-transparent text-text-pg-dim hover:border-status-negative hover:text-status-negative lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-visible:opacity-100 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
           {conversations.length === 0 ? <div className="px-3 py-4 text-center text-xs text-text-pg-dim">{zh ? "暂无历史对话" : "No conversation history"}</div> : null}
         </div>
         {conversations.length ? (
           <div className="border-t border-border-pg p-2">
-            <button type="button" onClick={() => void deleteAll()} className="flex w-full items-center justify-center gap-2 border border-border-pg px-3 py-2 text-xs text-text-pg-dim hover:border-status-negative hover:text-status-negative transition rounded-lg" aria-label={zh ? "删除全部历史对话" : "Delete all conversation history"}>
+            <button type="button" onClick={() => void deleteAll()} disabled={busy || uploading || loading || !!historyAction} className="flex w-full items-center justify-center gap-2 border border-border-pg px-3 py-2 text-xs text-text-pg-dim hover:border-status-negative hover:text-status-negative transition rounded-lg" aria-label={zh ? "删除全部历史对话" : "Delete all conversation history"}>
               <Trash2 className="h-3.5 w-3.5" />
               <span>{zh ? "删除全部历史对话" : "Delete all history"}</span>
             </button>
@@ -552,9 +603,11 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
           </div>
         </div>
         <div className="shrink-0 border-t border-border-pg bg-bg-app p-3 md:p-4">
+          {historyError && !mobileHistoryOpen ? <div role="alert" className="mx-auto mb-3 flex max-w-3xl items-start gap-3 rounded-lg border border-status-warning/40 p-3 text-sm text-status-warning"><span className="min-w-0 flex-1">{historyError}</span><button type="button" onClick={() => setHistoryError("")} aria-label={zh ? "关闭历史提示" : "Dismiss history notice"} className="grid h-9 w-9 shrink-0 place-items-center"><X className="h-4 w-4" aria-hidden /></button></div> : null}
+          {historyAction ? <p role="status" className="mx-auto mb-2 max-w-3xl text-xs text-text-pg-muted">{zh ? "正在更新历史对话…" : "Updating conversation history…"}</p> : null}
           <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2 lg:hidden">
             <button ref={historyTriggerRef} type="button" onClick={() => setMobileHistoryOpen(true)} aria-label={zh ? "历史对话" : "Conversation history"} aria-expanded={mobileHistoryOpen} data-testid="chat-history-trigger" className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm hover:bg-[var(--pg-surface-hover)]"><PanelLeftOpen className="h-4 w-4" />{zh ? "历史" : "History"}</button>
-            <button type="button" onClick={createNew} aria-label={zh ? "新会话" : "New conversation"} data-testid="chat-new-trigger" className="grid h-10 w-10 place-items-center rounded-lg hover:bg-[var(--pg-surface-hover)]"><MessageSquarePlus className="h-4 w-4" /></button>
+            <button type="button" onClick={() => void createNew()} disabled={busy || uploading || loading || !!historyAction} aria-label={zh ? "新会话" : "New conversation"} data-testid="chat-new-trigger" className="grid h-10 w-10 place-items-center rounded-lg hover:bg-[var(--pg-surface-hover)]"><MessageSquarePlus className="h-4 w-4" /></button>
           </div>
           {approval ? <div role="alert" className="mx-auto mb-3 max-w-3xl rounded-lg border border-[var(--pg-border-default)] bg-[var(--pg-surface-2)] p-3" data-testid="tool-approval">
             <p className="text-sm font-medium">{zh ? "此操作需要你的确认" : "This action needs your approval"}</p>
@@ -562,7 +615,7 @@ export function AgentChat({ locale, initialConversationId }: { locale: Locale; i
             <details className="mt-2 text-xs"><summary>{zh ? "查看参数" : "View arguments"}</summary><pre className="max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(approval.arguments, null, 2)}</pre></details>
             <div className="mt-3 flex gap-2">{(["denied", "approved"] as const).map(decision => <button key={decision} type="button" disabled={approving} className="min-h-10 rounded-md border border-[var(--pg-border-default)] px-4 text-sm" onClick={async () => { setApproving(true); try { await approveAgentTool(approval.toolCallId, decision); setApproval(null); } catch { setFailure({kind: "generic", message: zh ? "确认已过期或无法提交，请刷新会话。" : "Approval expired or could not be submitted. Refresh the conversation."}); } finally { setApproving(false); } }}>{decision === "approved" ? (zh ? "允许此次操作" : "Allow once") : (zh ? "拒绝" : "Deny")}</button>)}</div>
           </div> : null}
-          <ChatWorkspaceComposer locale={locale} input={input} onInput={setInput} busy={busy} onSend={() => void send()} onStop={() => void stop()} attachments={attachments} onAttachments={setAttachments} permission={permission} onUploading={setUploading}
+          <ChatWorkspaceComposer locale={locale} input={input} onInput={setInput} busy={busy} disabled={loading || !!historyAction} onSend={() => void send()} onStop={() => { void stop(); composerRef.current?.focus(); }} attachments={attachments} onAttachments={setAttachments} permission={permission} onUploading={setUploading}
             onPermission={async (mode, acknowledged) => { if (conversationId) await setAgentPermission(conversationId, mode, acknowledged); setPermission(mode); }}
             researchMode={researchMode} onResearch={setResearchMode} onTextarea={node => { composerRef.current = node; }}
             modelControl={<select id="agent-model" aria-label={zh ? "模型" : "Model"} value={selectedModel} onChange={event => setSelectedModel(event.target.value)} disabled={busy} className="min-h-10 max-w-[220px] rounded-md bg-transparent text-xs text-text-pg focus-visible:ring-2">{models.map(model => <option key={model.id} value={model.id} disabled={!model.available}>{agentModelLabel(model, modelCopy, defaultModelName)}</option>)}</select>}

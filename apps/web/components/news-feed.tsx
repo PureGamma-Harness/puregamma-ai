@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Clock3, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { getNewsFeed, type NewsFeedItem, type NewsFeedResponse } from "@/lib/api";
 import type { Locale } from "@/i18n/routing";
@@ -108,10 +108,21 @@ export function NewsFeed({ locale, initial, copy }: { locale: Locale; initial: N
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(initial.unavailable ? initial.error_code || "UNAVAILABLE" : "");
+  const requestVersion = useRef(0);
+  const pending = useRef(false);
 
   const request = useCallback(async (mode: "reset" | "append" | "refresh", cursor?: string) => {
+    if (mode !== "reset" && pending.current) return;
+    const version = ++requestVersion.current;
+    pending.current = true;
     if (mode === "append") setLoadingMore(true);
-    else if (mode === "reset") setLoading(true);
+    else if (mode === "reset") {
+      setLoading(true);
+      setLoadingMore(false);
+      setError("");
+      // Do not show the previous filter's headlines as current results.
+      setFeed(current => ({ ...current, items: [], page: { ...current.page, has_more: false, next_cursor: null } }));
+    }
     try {
       const result = await getNewsFeed(locale, {
         kind: filters.kind,
@@ -123,6 +134,7 @@ export function NewsFeed({ locale, initial, copy }: { locale: Locale; initial: N
         limit: 30,
         cursor
       });
+      if (version !== requestVersion.current) return;
       if (result.unavailable) {
         setError(result.error_code || "UNAVAILABLE");
         return;
@@ -133,14 +145,20 @@ export function NewsFeed({ locale, initial, copy }: { locale: Locale; initial: N
         if (mode === "refresh") return { ...result, items: uniqueItems([...result.items, ...current.items]).slice(0, 150), page: current.page };
         return result;
       });
+    } catch {
+      if (version === requestVersion.current) setError("UNAVAILABLE");
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (version === requestVersion.current) {
+        pending.current = false;
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [filters, locale]);
 
   useEffect(() => {
     void request("reset");
+    return () => { requestVersion.current += 1; pending.current = false; };
   }, [request]);
 
   useEffect(() => {
@@ -215,7 +233,7 @@ export function NewsFeed({ locale, initial, copy }: { locale: Locale; initial: N
 
       <div aria-live="polite" aria-busy={loading} className="space-y-3">
         {feed.meta.language_fallback ? <div className="rounded-xl border border-status-warning/40 bg-bg-panel px-4 py-3 text-sm text-text-pg-muted">{copy.languageFallback}</div> : null}
-        {error ? <div className="rounded-xl border border-status-negative/40 bg-bg-panel p-5"><strong>{copy.errorTitle}</strong><div className="mt-3"><button type="button" onClick={() => void request("reset")} className="rounded-lg border border-border-pg px-3 py-2 text-sm">{copy.retry}</button></div></div> : null}
+        {error ? <div role="alert" className="rounded-xl border border-status-negative/40 bg-bg-panel p-5"><strong>{copy.errorTitle}</strong><div className="mt-3"><button type="button" onClick={() => void request("reset")} className="rounded-lg border border-border-pg px-3 py-2 text-sm">{copy.retry}</button></div></div> : null}
         {loading && !feed.items.length ? <div className="rounded-xl border border-border-pg bg-bg-panel p-8 text-center text-sm text-text-pg-muted">{copy.loading}</div> : null}
         {!loading && !error && !feed.items.length ? <div className="rounded-xl border border-dashed border-border-pg bg-bg-panel p-10 text-center"><Clock3 className="mx-auto h-6 w-6 text-text-pg-dim" /><h2 className="mt-3 font-semibold">{copy.emptyTitle}</h2><p className="mt-2 text-sm text-text-pg-muted">{copy.emptyDescription}</p></div> : null}
         {feed.items.length > 0 ? (
@@ -266,7 +284,7 @@ export function NewsFeed({ locale, initial, copy }: { locale: Locale; initial: N
         ) : null}
       </div>
 
-      {feed.page.has_more && feed.page.next_cursor ? <button type="button" disabled={loadingMore} onClick={() => void request("append", feed.page.next_cursor || undefined)} className="w-full rounded-xl border border-border-pg bg-bg-panel py-3 text-sm font-medium hover:border-border-pg-strong disabled:opacity-50">{loadingMore ? copy.loadingMore : copy.loadMore}</button> : null}
+      {feed.page.has_more && feed.page.next_cursor ? <button type="button" disabled={loadingMore || loading} onClick={() => void request("append", feed.page.next_cursor || undefined)} className="w-full rounded-xl border border-border-pg bg-bg-panel py-3 text-sm font-medium hover:border-border-pg-strong disabled:opacity-50">{loadingMore ? copy.loadingMore : copy.loadMore}</button> : null}
 
       <div className="flex gap-2 rounded-xl border border-border-pg bg-bg-panel p-4 text-xs leading-5 text-text-pg-muted"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><p>{copy.disclaimer}</p></div>
     </div>
