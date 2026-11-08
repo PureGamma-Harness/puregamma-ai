@@ -21,8 +21,14 @@ const inputClass = "min-h-10 w-full border border-border-pg bg-bg-panel-muted px
 function messageFromError(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
   try {
-    const parsed = JSON.parse(error.message) as { detail?: string };
-    return parsed.detail || fallback;
+    const parsed: unknown = JSON.parse(error.message);
+    if (!parsed || typeof parsed !== "object" || !("detail" in parsed)) return fallback;
+    const detail: unknown = parsed.detail;
+    if (typeof detail === "string") return detail || fallback;
+    if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") {
+      return detail.message || fallback;
+    }
+    return fallback;
   } catch {
     return error.message || fallback;
   }
