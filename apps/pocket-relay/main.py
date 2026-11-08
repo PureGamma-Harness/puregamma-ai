@@ -429,7 +429,7 @@ function showError(error){
 async function rpc(path,options={}){
   const headers=new Headers(options.headers||{});
   if(rpcToken)headers.set('x-pocket-rpc-token',rpcToken);
-  const response=await fetch(path,{...options,headers,mode:'same-origin',redirect:'error',cache:'no-store'});
+  const response=await fetch('.'+path,{...options,headers,mode:'same-origin',redirect:'error',cache:'no-store'});
   if(!response.ok){
     if(response.status===403){
       rpcToken='';el('rpc-key-form').hidden=false;
