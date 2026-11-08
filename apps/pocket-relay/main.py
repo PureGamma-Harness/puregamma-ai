@@ -53,20 +53,29 @@ def _cookie_value(kind: str, pin: str | None = None) -> str:
     return hmac.new(SESSION_KEY.encode(), f"{kind}:{pin}".encode(), hashlib.sha256).hexdigest()
 
 
-def _authorized(request: Request, kind: str) -> bool:
-    cookie = request.cookies.get(COOKIE_NAME)
-    if cookie and hmac.compare_digest(cookie, _cookie_value(kind)):
-        return True
+def _credential_matches(provided: str, expected: str) -> bool:
+    try:
+        return hmac.compare_digest(provided, expected)
+    except TypeError:
+        # Legacy persisted PINs may contain non-ASCII digits. Do not normalize
+        # or replace them, and never turn an invalid comparison into HTTP500.
+        return False
+
+
+def _authorized(request: Request | WebSocket, kind: str) -> bool:
+    cookie = request.cookies.get(COOKIE_NAME, "")
     provided = request.query_params.get("pin", "")
-    return bool(provided and hmac.compare_digest(provided, _pin_for_kind(kind)))
+    # These are the selected Relay credential values, not arbitrary app cookies.
+    # Reject malformed text even when the other credential would authorize it.
+    if not cookie.isascii() or not provided.isascii():
+        return False
+    if cookie and _credential_matches(cookie, _cookie_value(kind)):
+        return True
+    return bool(provided and _credential_matches(provided, _pin_for_kind(kind)))
 
 
 def _ws_authorized(websocket: WebSocket, kind: str) -> bool:
-    cookie = websocket.cookies.get(COOKIE_NAME)
-    if cookie and hmac.compare_digest(cookie, _cookie_value(kind)):
-        return True
-    provided = websocket.query_params.get("pin", "")
-    return bool(provided and hmac.compare_digest(provided, _pin_for_kind(kind)))
+    return _authorized(websocket, kind)
 
 
 def _private_ok(ip: str) -> bool:
@@ -276,14 +285,15 @@ class ProxyMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "method not allowed"}, status_code=405)
         kind = _kind_for_host(request.headers.get("host", "").split(":")[0])
         provided = request.query_params.get("pin", "")
-        if provided and hmac.compare_digest(provided, _pin_for_kind(kind)):
+        authorized = _authorized(request, kind)
+        if authorized and provided and _credential_matches(provided, _pin_for_kind(kind)):
             # Bind to the PIN just verified, before awaiting the upstream. A PIN
             # rotated during that wait must not issue a session for its successor.
             session_cookie = _cookie_value(kind, provided)
             response = await _proxy_http(request)
             response.set_cookie(COOKIE_NAME, session_cookie, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax")
             return response
-        if _authorized(request, kind):
+        if authorized:
             return await _proxy_http(request)
         accept = request.headers.get("accept", "")
         if "text/html" in accept:
