@@ -79,7 +79,9 @@ def refresh_lan_pin() -> str:
 # ---------- 自定义 PIN ----------
 def set_custom_pin(which: str, value: str) -> str:
     value = value.strip()
-    if not PIN_RE.match(value):
+    # New configuration follows the UI's [0-9]{8} contract. Keep the legacy
+    # reader unchanged so existing state is never silently migrated or reset.
+    if not value.isascii() or not PIN_RE.fullmatch(value):
         raise ValueError("PIN must be exactly 8 digits")
     if which == "public":
         _write_pin("token", value)
