@@ -96,9 +96,15 @@ def transition_run(
     if updated != 1:
         # Another worker already transitioned this run. Realign the caller's
         # object with the authoritative row and treat this as a no-op.
-        fresh = db.get(HarnessResearchRun, run.id)
+        fresh = (
+            db.query(HarnessResearchRun)
+            .filter(HarnessResearchRun.id == run.id)
+            .populate_existing()
+            .one_or_none()
+        )
         if fresh is not None:
-            run.status = fresh.status
+            for field in ("status", "started_at", "completed_at", "canceled_at", "timeout_at"):
+                setattr(run, field, getattr(fresh, field))
         return False
 
     run.status = to_status
@@ -109,7 +115,7 @@ def transition_run(
     if to_status == "canceled":
         run.canceled_at = now
     if to_status == "timed_out":
-        run.timeout_at = run.timeout_at or now
+        run.timeout_at = now
     if timeout_seconds is not None and run.timeout_at is None:
         run.timeout_at = now + timedelta(seconds=timeout_seconds)
 
