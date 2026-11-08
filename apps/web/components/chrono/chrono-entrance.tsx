@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 import { gsap, useGSAP } from "@/components/chrono/motion";
-import { useChronoTierReactive, useHtmlDataset } from "@/lib/chrono";
+import { resolveChronoTier, useChronoTierReactive, useHtmlDataset } from "@/lib/chrono";
 
 /**
  * Above-the-fold "stage" sequence for an exploration hero: a weighted, non-
@@ -19,7 +19,9 @@ export function ChronoEntrance({ children, className = "" }: { children: ReactNo
   const style = useHtmlDataset("visualStyle");
 
   useGSAP(() => {
-    if (style === "classic" || tier === "static" || !rootRef.current) return;
+    // Reactive hooks begin with hydration-safe defaults. Consult the actual
+    // document and device before hiding any server-rendered content.
+    if (document.documentElement.dataset.visualStyle !== "glass" || resolveChronoTier() === "static" || !rootRef.current) return;
     const els = gsap.utils.toArray<HTMLElement>(rootRef.current.querySelectorAll("[data-chrono-enter]"));
     if (!els.length) return;
     gsap.set(els, { opacity: 0, y: 26 });
@@ -28,7 +30,7 @@ export function ChronoEntrance({ children, className = "" }: { children: ReactNo
       tl.to(el, { opacity: 1, y: 0 }, index === 0 ? 0 : "+=0.14");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, { scope: rootRef, dependencies: [tier, style] });
+  }, { scope: rootRef, dependencies: [tier, style], revertOnUpdate: true });
 
   return (
     <div ref={rootRef} className={className}>

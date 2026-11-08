@@ -1,9 +1,28 @@
 "use client";
 
 import { Minus, Monitor, Moon, Plus, Sparkles, Sun } from "lucide-react";
-import { applyVisualStyle, readVisualStyle, type VisualStyle } from "@/lib/visual-style";
+import { applyVisualStyle, DEFAULT_VISUAL_STYLE, readVisualStyle, VISUAL_STYLE_EVENT, VISUAL_STYLE_KEY, type VisualStyle } from "@/lib/visual-style";
 import { SCALES, THEME_CYCLE, useAppearance, type FontScale, type ThemePreference } from "@/lib/appearance";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+function visualStyleSnapshot(): VisualStyle {
+  const applied = document.documentElement.dataset.visualStyle;
+  return applied === "glass" || applied === "classic" ? applied : readVisualStyle();
+}
+
+function subscribeVisualStyle(onChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== VISUAL_STYLE_KEY) return;
+    document.documentElement.dataset.visualStyle = readVisualStyle();
+    onChange();
+  };
+  window.addEventListener(VISUAL_STYLE_EVENT, onChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(VISUAL_STYLE_EVENT, onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
 
 function clsxLike(visualStyle: VisualStyle, base: string): string {
   // The glass style is the default: highlight the control only when the
@@ -29,9 +48,7 @@ export function AppearanceControls({
   showFontScale?: boolean;
 }) {
   const { preference, resolved, fontScale, setPreference, setFontScale } = useAppearance();
-  const [visualStyle, setVisualStyle] = useState<VisualStyle>("glass");
-
-  useEffect(() => { setVisualStyle(readVisualStyle()); }, []);
+  const visualStyle = useSyncExternalStore(subscribeVisualStyle, visualStyleSnapshot, () => DEFAULT_VISUAL_STYLE);
 
   const cycleTheme = () => {
     // "system" resolves to the OS preference, so the visible icon must reflect
@@ -41,12 +58,11 @@ export function AppearanceControls({
   };
 
   const applyStyle = (value: VisualStyle) => {
-    setVisualStyle(value);
     applyVisualStyle(value);
   };
 
   const scaleIndex = SCALES.indexOf(fontScale);
-  const buttonClass = "grid h-9 w-9 place-items-center border border-border-pg hover:border-border-pg-strong disabled:opacity-35";
+  const buttonClass = "grid h-10 w-10 place-items-center rounded-lg border border-border-pg hover:border-border-pg-strong disabled:opacity-35";
 
   const themeTitle =
     preference === "system"
@@ -60,7 +76,7 @@ export function AppearanceControls({
   const ThemeIcon = preference === "system" ? Monitor : resolved === "dark" ? Moon : Sun;
 
   return (
-    <div className="flex items-center gap-1" aria-label={locale === "zh" ? "外观设置" : "Appearance settings"}>
+    <div className="flex shrink-0 items-center gap-1" aria-label={locale === "zh" ? "外观设置" : "Appearance settings"}>
       <button
         className={buttonClass}
         type="button"
@@ -75,16 +91,17 @@ export function AppearanceControls({
         className={clsxLike(visualStyle, buttonClass)}
         type="button"
         aria-pressed={visualStyle === "glass"}
+        aria-label={locale === "zh" ? (visualStyle === "glass" ? "切换为经典外观" : "切换为玻璃外观") : visualStyle === "glass" ? "Switch to classic appearance" : "Switch to glass appearance"}
         onClick={() => applyStyle(visualStyle === "glass" ? "classic" : "glass")}
         title={locale === "zh" ? (visualStyle === "glass" ? "切换为经典外观" : "切换为玻璃外观") : visualStyle === "glass" ? "Switch to classic appearance" : "Switch to glass appearance"}
       >
         <Sparkles className="h-3.5 w-3.5" />
       </button>
       {showFontScale ? <>
-        <button className={buttonClass} type="button" disabled={scaleIndex === 0} onClick={() => setFontScale(SCALES[scaleIndex - 1])} title={locale === "zh" ? "缩小字体" : "Decrease text size"}>
+        <button className={buttonClass} type="button" disabled={scaleIndex === 0} onClick={() => setFontScale(SCALES[scaleIndex - 1])} aria-label={locale === "zh" ? "缩小字体" : "Decrease text size"} title={locale === "zh" ? "缩小字体" : "Decrease text size"}>
           <Minus className="h-3.5 w-3.5" />
         </button>
-        <button className={buttonClass} type="button" disabled={scaleIndex === SCALES.length - 1} onClick={() => setFontScale(SCALES[scaleIndex + 1])} title={locale === "zh" ? "放大字体" : "Increase text size"}>
+        <button className={buttonClass} type="button" disabled={scaleIndex === SCALES.length - 1} onClick={() => setFontScale(SCALES[scaleIndex + 1])} aria-label={locale === "zh" ? "放大字体" : "Increase text size"} title={locale === "zh" ? "放大字体" : "Increase text size"}>
           <Plus className="h-3.5 w-3.5" />
         </button>
       </> : null}

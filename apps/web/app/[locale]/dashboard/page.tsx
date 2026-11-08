@@ -42,7 +42,7 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
   const copy = getMessageNamespace(locale, "dashboard");
   const { market, subscription, reports } = await getDashboard(locale);
 
-  const status: MarketStatus = (market as { unavailable?: boolean }).unavailable ? "waiting" : (market.mockMode ? "stale" : "live");
+  const status: MarketStatus = (market as { unavailable?: boolean }).unavailable || market.assets.length === 0 ? "waiting" : (market.mockMode ? "stale" : "live");
   const liveAssets = typeof market.live_assets === "number" ? market.live_assets : null;
   const recentReports: ReportRow[] = Array.isArray(reports.reports) ? reports.reports.slice(0, 4) : [];
   // An archived report must never be displayed as the dashboard's current
@@ -70,6 +70,20 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
         />
       </ChronoEntrance>
 
+      <nav className="workflow-strip chrono-slice" data-chrono-slice aria-label={zh ? "研究工作流程" : "Research workflows"}>
+        {[
+          { path: "/research", title: zh ? "研究工作台" : "Research desk", detail: zh ? "从研究问题追溯到资料与证据" : "Follow a research question to its sources" },
+          { path: "/reports", title: zh ? "证据与报告" : "Evidence & reports", detail: zh ? "阅读市场简报与历史研究结果" : "Read market briefs and previous findings" },
+          { path: "/portfolio", title: zh ? "组合背景" : "Portfolio context", detail: zh ? "检查持仓、敞口与数据新鲜度" : "Review holdings, exposure, and data freshness" },
+        ].map((workflow, index) => (
+          <Link key={workflow.path} href={withLocale(locale, workflow.path)} className="workflow-link">
+            <span className="workflow-index" aria-hidden>0{index + 1}</span>
+            <span><strong>{workflow.title}</strong><small>{workflow.detail}</small></span>
+            <ArrowUpRight className="mt-0.5 h-4 w-4 text-muted-2" aria-hidden />
+          </Link>
+        ))}
+      </nav>
+
       {subscription.unavailable ? <div className="chrono-slice" data-chrono-slice><ErrorState title={copy.accountBillingUnavailable} description={copy.accountBillingUnavailableDesc} /></div> : null}
 
       <div className="hub-grid">
@@ -86,10 +100,10 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
               {recentReports.length === 0 ? <p className="text-sm text-muted">{copy.evidenceEmpty}</p> :
                 <ul className="divide-y divide-border">
                   {recentReports.map((report) => (<li key={report.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
+                    <Link href={withLocale(locale, `/reports?report=${encodeURIComponent(report.id)}`)} className="min-w-0 rounded-sm hover:underline" aria-label={zh ? `在报告中阅读：${report.title}` : `Read in reports: ${report.title}`}>
                       <div className="truncate text-sm font-medium text-text-pg">{report.title}</div>
                       <div className="mt-0.5 text-[0.7rem] text-muted-2">{report.report_type}</div>
-                    </div>
+                    </Link>
                     <span className="shrink-0 text-[0.7rem] tabular-nums text-muted-2">{fmtDate(report.created_at, locale)}</span>
                   </li>))}
                 </ul>}

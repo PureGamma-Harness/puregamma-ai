@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, BookOpen, Bot, BrainCircuit, BriefcaseBusiness, Chrome, Code2, CreditCard, FlaskConical, Gauge, HeartHandshake, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Network, Newspaper, Smartphone, UserRound, X, type LucideIcon } from "lucide-react";
 import { AppearanceControls } from "@/components/appearance-controls";
@@ -137,27 +137,20 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
     applySurfaceTier(surfaceTierForPath(pathname || "/"));
     return () => applySurfaceTier(null);
   }, [pathname]);
-  useEffect(() => {
-    if (!mobileNavOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileNavOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mobileNavOpen]);
   return (
     <LocaleProvider locale={locale}>
       <PluginRuntime>
         <div className="relative min-h-screen">
+          <a href="#main-content" className="skip-navigation">{locale === "zh" ? "跳至主要内容" : "Skip to main content"}</a>
           <Chronosphere />
           <AuthExpiredRedirector locale={locale} />
         <SidebarNav locale={locale} />
         <MobileNavDrawer locale={locale} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
         <div className="lg:pl-[284px]">
-          <TopStatusBar locale={locale} onMenuClick={() => setMobileNavOpen(true)} />
+          <TopStatusBar locale={locale} mobileNavOpen={mobileNavOpen} onMenuClick={() => setMobileNavOpen(true)} />
 
-            <main className="mx-auto max-w-[1440px] px-4 py-5 md:px-6">
+            <main id="main-content" tabIndex={-1} className="shell-main mx-auto max-w-[1440px] px-4 py-5 md:px-6">
               {children}
             </main>
           </div>
@@ -168,17 +161,44 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
 }
 
 export function MobileNavDrawer({ locale, open, onClose }: { locale: Locale; open: boolean; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const pathname = usePathname();
   const activePathname = stripLocale(pathname);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!open) {
+      if (dialog.open) dialog.close();
+      return;
+    }
+    // Native modality makes the background inert, contains keyboard focus,
+    // and restores the opening control when the dialog closes.
+    if (!dialog.open) dialog.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (dialog.open) dialog.close();
+    };
+  }, [open]);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const dismissOnDesktop = () => { if (desktop.matches && open) onClose(); };
+    dismissOnDesktop();
+    desktop.addEventListener("change", dismissOnDesktop);
+    return () => desktop.removeEventListener("change", dismissOnDesktop);
+  }, [open, onClose]);
   return (
-    <>
-      {open ? <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden" onClick={onClose} aria-hidden /> : null}
-      <div role="dialog" aria-modal="true" aria-label={locale === "zh" ? "主导航" : "Primary navigation"} className={`fixed inset-y-3 left-3 z-50 flex w-80 max-w-[85vw] transform flex-col rounded-2xl border border-border-pg bg-bg-app p-5 shadow-2xl transition-transform duration-200 lg:hidden ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      <dialog ref={dialogRef} id="mobile-navigation" aria-label={locale === "zh" ? "主导航" : "Primary navigation"} className="mobile-nav-dialog" onCancel={onClose} onClose={onClose} onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+      }}>
         <div className="flex items-center justify-between gap-2">
-          <Link href={withLocale(locale, "/")} className="flex min-w-0 items-center gap-2 font-semibold text-text-pg">
+          <Link href={withLocale(locale, "/")} onClick={onClose} className="flex min-w-0 items-center gap-2 font-semibold text-text-pg">
             <Image src="/logo.png" alt="PureGamma" width={24} height={24} />PureGamma AI
           </Link>
-          <button type="button" onClick={onClose} aria-label={locale === "zh" ? "关闭导航" : "Close navigation"} className="grid h-9 w-9 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong rounded-lg"><X className="h-4 w-4" /></button>
+          <button type="button" autoFocus onClick={onClose} aria-label={locale === "zh" ? "关闭导航" : "Close navigation"} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong rounded-lg"><X className="h-4 w-4" aria-hidden /></button>
         </div>
         <nav className="mt-6 flex-1 space-y-7 overflow-y-auto" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
           {groups.map((group) => (
@@ -211,20 +231,19 @@ export function MobileNavDrawer({ locale, open, onClose }: { locale: Locale; ope
           wordmark, and the flex algorithm resolved the competition by
           compressing the brand to 65px — the brand lost and the secondary
           controls won. Keeping them reachable (rather than deleting them) is
-          what makes that a layout fix instead of a feature removal. This block
-          is hidden from `md` up, where the top bar has room for them again.
+          what makes that a layout fix instead of a feature removal. The drawer also keeps the full font-size controls reachable at tablet
+          widths; the compact top bar only repeats the theme/style switches.
         */}
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-border-pg pt-3 md:hidden" data-testid="nav-secondary-controls">
+        <div className="mt-3 border-t border-border-pg pt-3" data-testid="nav-secondary-controls">
           <span className="text-xs text-text-pg-dim">
             {locale === "zh" ? "显示与外观" : "Display & appearance"}
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="mt-2 flex items-center gap-1.5">
             <LanguageSwitcher compact />
-            <AppearanceControls locale={locale} showFontScale={false} />
+            <AppearanceControls locale={locale} />
           </div>
         </div>
-      </div>
-    </>
+      </dialog>
   );
 }
 
@@ -237,9 +256,9 @@ export function SidebarNav({ locale }: { locale: Locale }) {
       </Link>
       <div className="mt-2 text-sm leading-6 text-text-pg-muted">{t(locale, "common.nav.tagline")}</div>
       <div className="mt-4">
-        <div className="flex items-center gap-2"><LanguageSwitcher compact /><AppearanceControls locale={locale} /></div>
+        <div className="flex flex-wrap items-center gap-2"><LanguageSwitcher compact /><AppearanceControls locale={locale} /></div>
       </div>
-      <nav className="shell-nav mt-8 flex-1 space-y-7 overflow-y-auto pr-1">
+      <nav className="shell-nav mt-8 flex-1 space-y-7 overflow-y-auto pr-1" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
         {groups.map((group) => (
           <div key={group.labelKey}>
             <div className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-pg-dim">{t(locale, group.labelKey)}</div>
@@ -248,7 +267,7 @@ export function SidebarNav({ locale }: { locale: Locale }) {
                 const Icon = item.icon;
                 const active = item.href === "/" ? activePathname === "/" : activePathname.startsWith(item.href);
                 return (
-                  <Link key={item.href} href={withLocale(locale, item.href)} className={`nav-item ${active ? "nav-active" : ""}`}>
+                  <Link key={item.href} href={withLocale(locale, item.href)} aria-current={active ? "page" : undefined} className={`nav-item ${active ? "nav-active" : ""}`}>
                     <Icon className="nav-icon" aria-hidden />
                     {t(locale, item.labelKey)}
                   </Link>
@@ -267,7 +286,7 @@ export function SidebarNav({ locale }: { locale: Locale }) {
   );
 }
 
-export function TopStatusBar({ locale, onMenuClick }: { locale: Locale; onMenuClick: () => void }) {
+export function TopStatusBar({ locale, onMenuClick, mobileNavOpen = false }: { locale: Locale; onMenuClick: () => void; mobileNavOpen?: boolean }) {
   const [storedUser, setStoredUser] = useState<StoredUser | null>(null);
   const pathname = usePathname();
   const dashboardRoute = stripLocale(pathname || "/") === "/dashboard";
@@ -320,7 +339,7 @@ export function TopStatusBar({ locale, onMenuClick }: { locale: Locale; onMenuCl
           reachable, and the brand is no longer compressible. Font size was not
           reduced to make things fit.
         */}
-        <button type="button" onClick={onMenuClick} aria-label={locale === "zh" ? "打开导航" : "Open navigation"} className="grid h-9 w-9 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong lg:hidden rounded-lg" data-testid="nav-menu-button"><Menu className="h-4 w-4" /></button>
+        <button type="button" onClick={onMenuClick} aria-expanded={mobileNavOpen} aria-controls="mobile-navigation" aria-haspopup="dialog" aria-label={locale === "zh" ? "打开导航" : "Open navigation"} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong lg:hidden rounded-lg" data-testid="nav-menu-button"><Menu className="h-4 w-4" aria-hidden /></button>
         <Link
           href={withLocale(locale, "/")}
           className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold text-text-pg lg:hidden"
@@ -335,7 +354,7 @@ export function TopStatusBar({ locale, onMenuClick }: { locale: Locale; onMenuCl
           <PlanBadge plan={storedUser?.plan || "Free"} tier={storedUser?.membership_tier} locale={locale} />
           <Badge tone="neutral">{storedUser ? `${storedUser.credit_balance ?? 0} credits` : t(locale, "common.topbar.credits")}</Badge>
           <LanguageSwitcher compact />
-          <AppearanceControls locale={locale} />
+          <AppearanceControls locale={locale} showFontScale={false} />
           {storedUser ? (
             <Link href={withLocale(locale, "/account")} className="ml-2 flex items-center gap-2 border border-border-pg bg-bg-panel-muted px-2 py-1 hover:border-border-pg-strong rounded-lg">
               {storedUser.avatar_url ? <span aria-hidden className="h-5 w-5 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${storedUser.avatar_url})` }} /> : null}

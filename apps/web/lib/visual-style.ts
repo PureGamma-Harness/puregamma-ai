@@ -1,4 +1,5 @@
 export const VISUAL_STYLE_KEY = "pg_visual_style";
+export const VISUAL_STYLE_EVENT = "pg:visual-style";
 
 export type VisualStyle = "glass" | "classic";
 
@@ -16,7 +17,8 @@ export type SurfaceTier = "financial" | "ocean";
 export function readVisualStyle(): VisualStyle {
   if (typeof window === "undefined") return DEFAULT_VISUAL_STYLE;
   try {
-    return window.localStorage.getItem(VISUAL_STYLE_KEY) === "classic" ? "classic" : DEFAULT_VISUAL_STYLE;
+    const saved = window.localStorage.getItem(VISUAL_STYLE_KEY);
+    return saved === "classic" || saved === "glass" ? saved : DEFAULT_VISUAL_STYLE;
   } catch {
     return DEFAULT_VISUAL_STYLE;
   }
@@ -30,6 +32,7 @@ export function applyVisualStyle(style: VisualStyle): void {
   } catch {
     /* A blocked storage backend must not prevent the live style switch. */
   }
+  window.dispatchEvent(new Event(VISUAL_STYLE_EVENT));
 }
 
 const FINANCIAL_PREFIXES = [

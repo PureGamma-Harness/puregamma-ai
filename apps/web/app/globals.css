@@ -969,8 +969,68 @@ body { font-family: var(--font-sans); }
 .shell-nav::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 .shell-nav::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
 
+/* Shared keyboard and mobile navigation behavior, in both appearances. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.shell-main { scroll-margin-top: 6rem; }
+.shell-main:focus { outline: none; }
+.skip-navigation {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--pg-surface-inverse);
+  color: var(--pg-text-inverse);
+  padding: 0.8rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.skip-navigation:focus { transform: translateY(0); }
+.mobile-nav-dialog {
+  position: fixed;
+  inset: 12px auto 12px 12px;
+  width: min(320px, 85vw);
+  max-width: none;
+  height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px);
+  margin: 0;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+}
+.mobile-nav-dialog[open] { display: flex; flex-direction: column; }
+.mobile-nav-dialog::backdrop { background: rgba(5, 10, 20, 0.48); backdrop-filter: blur(4px); }
+.mobile-nav-dialog nav { min-height: 0; overscroll-behavior: contain; }
+.mobile-nav-dialog .nav-item { min-height: 44px; }
+
 /* ── Hub (dashboard) layout ─────────────────────────────────────────────── */
 .dashboard-briefing { display: flex; flex-direction: column; gap: var(--section-gap); }
+.workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+.workflow-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 20px 18px;
+  color: var(--foreground);
+  transition: background 0.15s ease;
+}
+.workflow-link + .workflow-link { border-left: 1px solid var(--border); }
+.workflow-link:hover { background: var(--panel-muted); }
+.workflow-index { padding-top: 2px; color: var(--muted-2); font-family: var(--font-mono); font-size: 0.65rem; }
+.workflow-link strong { display: block; font-size: 0.85rem; font-weight: 600; }
+.workflow-link small { display: block; margin-top: 5px; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
 .hub-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); }
 .hub-col { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
 .workbench-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); }
@@ -1045,11 +1105,15 @@ body { font-family: var(--font-sans); }
   [data-visual-style="glass"] .liquid::before, [data-visual-style="glass"] .lens-surface::before { opacity: 0.5; }
 }
 @media (prefers-reduced-transparency: reduce) {
+  .mobile-nav-dialog::backdrop { backdrop-filter: none; }
   [data-visual-style="glass"] .liquid, [data-visual-style="glass"] .lens-surface { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
   [data-visual-style="glass"] .shell-chrome, [data-visual-style="glass"] .shell-rail { backdrop-filter: none; -webkit-backdrop-filter: none; }
   .chronosphere { opacity: 0.35; }
 }
 @media (max-width: 767px) {
+  .workflow-strip { grid-template-columns: 1fr; }
+  .workflow-link { padding: 16px 4px; }
+  .workflow-link + .workflow-link { border-left: 0; border-top: 1px solid var(--border); }
   [data-visual-style="glass"] .liquid, [data-visual-style="glass"] .lens-surface { backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   .command-chip { display: none; }
   .command-submit { min-width: 2.65rem; justify-content: center; padding-inline: 0.65rem; }
