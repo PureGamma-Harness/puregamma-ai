@@ -213,7 +213,12 @@ def test_cancel_losing_to_completion_does_not_refund_the_completed_run(sessions,
         assert db.query(CreditRefundEvent).count() == 0
 
 
-@pytest.mark.parametrize("content", ["Finding [1], fabricated support [999].", "Finding [1], invalid source [0].", "Finding [1], noncanonical source [01].", "Finding [1], unsupported group [1, 999]."])
+@pytest.mark.parametrize("content", [
+    "Finding [1], fabricated support [999].", "Finding [1], invalid source [0].",
+    "Finding [1], noncanonical source [01].", "Finding [1], unsupported group [1, 999].",
+    "Finding [1], fullwidth source [９９９].", "Finding [1], signed source [+999].",
+    "Finding [1], decimal source [1.0].", "Finding [1], unsupported range [1:999].",
+])
 def test_unknown_or_malformed_citations_cannot_validate_an_artifact(sessions, monkeypatch, content):
     gateway(monkeypatch, content)
     with sessions() as db:
@@ -250,3 +255,32 @@ def test_artifact_failure_cannot_publish_a_completed_run(sessions, monkeypatch):
         assert db.query(ResearchArtifact).count() == 0
         assert db.query(CreditRefundEvent).count() == 1
         assert db.query(CreditSettlementRecord).count() == 0
+
+
+@pytest.mark.parametrize("items,expected", [(EVIDENCE, "completed"), ([], "degraded")])
+def test_identical_evidence_can_back_distinct_owned_questions(sessions, monkeypatch, items, expected):
+    calls = gateway(monkeypatch)
+    monkeypatch.setattr(service, "_gather_evidence", lambda *args: items)
+    with sessions() as db:
+        first, _ = create(db, prompt="First question about the evidence")
+        assert service.execute_queued_run(db, first.id)["status"] == expected
+        second, _ = create(db, prompt="A different question about the same evidence")
+        assert service.execute_queued_run(db, second.id)["status"] == expected
+        assert len(calls) == 2
+        assert first.evidence_snapshot_id == second.evidence_snapshot_id
+        assert db.query(EvidenceSnapshot).count() == 1
+        assert db.query(ResearchArtifact).count() == 2
+
+
+def test_identical_evidence_never_reuses_another_tenants_snapshot(sessions, monkeypatch):
+    gateway(monkeypatch)
+    with sessions() as db:
+        first, _ = create(db)
+        assert service.execute_queued_run(db, first.id)["status"] == "completed"
+        db.add(User(id="other-owner", email="other-harness@example.invalid", name="Other", plan="Pro", credit_balance=10000))
+        db.commit()
+        second, _ = service.create_harness_run(db, "other-owner", name="Other question", prompt="Explain the same recorded evidence", data_sources=["market"], skill="harness_deep_research")
+        assert service.execute_queued_run(db, second.id)["status"] == "completed"
+        assert first.evidence_snapshot_id != second.evidence_snapshot_id
+        assert db.query(EvidenceSnapshot).count() == 2
+        assert service.run_evidence(db, second) == EVIDENCE

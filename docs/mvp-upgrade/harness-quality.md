@@ -38,17 +38,25 @@ The current model-facing TypeScript research tools render only document timestam
 
 Implemented in the active research service plus `packages/harness/state_machine.py` and the dependency-free `packages/harness/citations.py`. No database migration or dependency change is required.
 
-The final byte-identical 19-case replay file against unchanged production source produced **15 failures and 4 passes**, with zero errors/skips. After implementation, the same replay plus existing foundation/API contracts produced **57 passed**, zero failures/errors/skips. Evidence: `/workspace/scratch/round6-harness-red-final.xml`, `/workspace/scratch/round6-harness-green.xml` and their matching `.log` files.
+The first 19-case replay produced15fail/4pass on unchanged source and57/57 related passes after the initial repair. Independent review then found noncanonical numeric-marker forms and identical immutable-snapshot insertion collisions. The final byte-identical **26-case** file was copied into a detached48fe315 baseline: **21 failures and5 passes**, zero errors/skips. The final candidate plus existing foundation/API contracts produced **64 passed**, zero failures/errors/skips. Final evidence: `/workspace/scratch/round6-harness-final-red.xml`, `/workspace/scratch/round6-harness-final-green.xml` and matching logs. Initial57-case independent review also passed before the follow-up changes.
 
 ```sh
 /workspace/puregamma-ai/.venv/bin/python -m pytest -q \
   tests/security/test_harness_lifecycle_integrity.py \
   tests/security/test_harness_foundation.py \
   tests/security/test_harness_contract.py \
-  --basetemp=/workspace/scratch/pytest-round6-harness-green \
-  --junitxml=/workspace/scratch/round6-harness-green.xml
+  --basetemp=/workspace/scratch/pytest-round6-harness-final-green \
+  --junitxml=/workspace/scratch/round6-harness-final-green.xml
 ```
 
 Self-review checked: equivalent legacy rows are inspected rather than blindly reused; input source order does not change a reservation; the accepted 4000-character prompt is never cut by the name; retry identity is anchored to the already ownership-checked parent; every worker phase gates side effects on its winning transition; cancellation losing to completion never refunds; late provider output is discarded; final-state and artifact publication share a transaction; citation diagnostics are deterministic and never manufacture source rows. Error summaries exposed to clients are fixed category messages, not raw provider exceptions.
 
 The existing best-effort settlement helper remains unchanged: financial settlement attempts are idempotent, but this change does not introduce a billing recovery scheduler or claim every external failure is atomically recoverable. Root owns the full integrated regression and an independent reviewer checks this patch before merge.
+
+### Independent-review follow-up and production database probe
+
+Numeric-looking closed bracket forms (including fullwidth digits, signs, decimals, groups and ranges) are now explicitly malformed unless they are a canonical ASCII `[n]`. Non-numeric labels and escaped bracket literals are not citation markers. This conservative protocol can degrade mathematical bracket notation; model reports must use the documented citation format and separate mathematical notation. This is reference integrity, not a Markdown entailment verifier.
+
+The immutable snapshot table already enforces `(user_id, source_scope, content_hash)` uniqueness. The service now reuses an identical bundle only for the same owner/scope and uses a nested savepoint if another run inserts the same bundle concurrently. The winning run claim remains in the outer transaction. New snapshot metadata records `created_by_harness_run_id` as creation provenance; old immutable metadata is never rewritten, and access remains through the ownership-checked run rather than a creator trace field. New replays cover two distinct questions sharing evidence, repeated empty-evidence runs and tenant-separated snapshots.
+
+A local **PostgreSQL16.15** probe additionally forced both workers to finish the initial snapshot SELECT before either INSERT. Exactly one real unique conflict occurred; both distinct runs completed with one shared owned snapshot and two artifacts. A separate same-run double-worker probe produced one provider call and one artifact. A cancellation committed during the synthetic provider call left a canceled run, zero artifacts and one refund. Every provider call was an offline fake; the temporary local container was removed and its name prefix checked absent. Probe script/results: `/workspace/scratch/round6-harness-postgres-probe.py`, `.json`, `.log`. These probes establish the selected row/unique-index interleavings, not a distributed crash-recovery guarantee.

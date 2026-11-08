@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.exc import IntegrityError
 
 from apps.api.config import get_settings, normalize_deepseek_model
 from packages.database.models import (
@@ -523,6 +524,54 @@ def _advance_run(
     return True
 
 
+def _freeze_evidence_snapshot(
+    db: Session, run: HarnessResearchRun, evidence_items: list[dict[str, Any]],
+) -> EvidenceSnapshot:
+    """Reuse an identical immutable bundle only within its owner's scope.
+
+    The database deliberately deduplicates (owner, scope, hash). A savepoint
+    handles simultaneous inserts without discarding this worker's run claim.
+    Snapshot creation metadata is provenance, not authority to read another run.
+    """
+    evidence_payload = json.dumps({"items": evidence_items}, ensure_ascii=True, sort_keys=True)
+    evidence_hash = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
+
+    def existing() -> EvidenceSnapshot | None:
+        return db.query(EvidenceSnapshot).filter(
+            EvidenceSnapshot.user_id == run.user_id,
+            EvidenceSnapshot.source_scope == "run",
+            EvidenceSnapshot.content_hash == evidence_hash,
+        ).one_or_none()
+
+    snapshot = existing()
+    if snapshot is not None:
+        return snapshot
+    snapshot = EvidenceSnapshot(
+        user_id=run.user_id,
+        schema_version="1.0",
+        source_scope="run",
+        freshness_window_seconds=900,
+        content_hash=evidence_hash,
+        normalized_evidence_json={"items": evidence_items},
+        source_ids_json=[item["id"] for item in evidence_items],
+        provider_list_json=[item["provider"] for item in evidence_items],
+        source_timestamps_json=[],
+        fetched_timestamps_json=[item["fetched_at"] for item in evidence_items],
+        mock_fallback_flags_json=[False for _ in evidence_items],
+        authorization_context_json={"created_by_harness_run_id": run.id},
+    )
+    try:
+        with db.begin_nested():
+            db.add(snapshot)
+            db.flush()
+    except IntegrityError:
+        winner = existing()
+        if winner is None:
+            raise
+        return winner
+    return snapshot
+
+
 def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
     """Worker-side execution: preparing -> running -> validating -> terminal."""
 
@@ -543,26 +592,9 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
     # evidence gathering must not leave a new snapshot or start a provider.
     if not _advance_run(db, run, "preparing", "running", reason="evidence gathered; freezing dispatch input"):
         return serialize_harness_run(run)
-    evidence_payload = json.dumps({"items": evidence_items}, ensure_ascii=True, sort_keys=True)
-    evidence_hash = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
-    snapshot = EvidenceSnapshot(
-        user_id=run.user_id,
-        schema_version="1.0",
-        source_scope="run",
-        freshness_window_seconds=900,
-        content_hash=evidence_hash,
-        normalized_evidence_json={"items": evidence_items},
-        source_ids_json=[item["id"] for item in evidence_items],
-        provider_list_json=[item["provider"] for item in evidence_items],
-        source_timestamps_json=[],
-        fetched_timestamps_json=[item["fetched_at"] for item in evidence_items],
-        mock_fallback_flags_json=[False for _ in evidence_items],
-        authorization_context_json={"harness_run_id": run.id},
-    )
-    db.add(snapshot)
-    db.flush()
+    snapshot = _freeze_evidence_snapshot(db, run, evidence_items)
     run.evidence_snapshot_id = snapshot.id
-    run.evidence_snapshot_hash = evidence_hash
+    run.evidence_snapshot_hash = snapshot.content_hash
     usage = dict(run.usage_json or {})
     usage["evidence_count"] = len(evidence_items)
     usage["evidence_ids"] = [item["id"] for item in evidence_items]

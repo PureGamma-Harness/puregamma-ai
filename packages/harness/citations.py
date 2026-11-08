@@ -10,7 +10,7 @@ import re
 from typing import Iterable
 
 CITATION_POLICY_VERSION = "numeric-marker-v1"
-_NUMERIC_MARKER = re.compile(r"(?<!\\)\[([0-9][0-9,;\s-]*|-[0-9]+)\]")
+_BRACKET_MARKER = re.compile(r"(?<!\\)\[([^\[\]\r\n]*)\]")
 
 
 @dataclass(frozen=True)
@@ -24,10 +24,19 @@ def validate_citation_markers(content: str, evidence_indexes: Iterable[int]) -> 
     known = set(evidence_indexes)
     references: set[int] = set()
     malformed: dict[str, None] = {}
-    for match in _NUMERIC_MARKER.finditer(content):
+    for match in _BRACKET_MARKER.finditer(content):
         marker = match.group(1)
+        candidate = marker.strip()
+        if not candidate:
+            continue
+        numeric_start = candidate[0].isnumeric() or (
+            candidate[0] in "+-−" and len(candidate) > 1 and candidate[1].isnumeric()
+        )
+        if not numeric_start:
+            continue
         # Evidence indexes are small. Bound conversion independently of Python's
-        # integer digit limit, and reject zero/leading-zero/group/range notation.
+        # integer digit limit. Numeric-looking noncanonical forms (including
+        # fullwidth digits, signs, decimal/group/range notation) fail closed.
         if len(marker) > 9 or not marker.isascii() or not marker.isdigit() or marker.startswith("0"):
             malformed[marker] = None
         else:
