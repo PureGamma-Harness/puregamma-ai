@@ -112,6 +112,14 @@ test("owned detail fixtures do not turn missing IDs into successful content", as
     await page.goto(route);
     await page.waitForLoadState("networkidle");
     const main = page.getByRole("main");
+    await expect(main).toBeVisible();
+    await expect.poll(async () => (await main.innerText()).replace(/\s/g, "").length).toBeGreaterThan(30);
+    await expect(main.locator('[aria-busy="true"]')).toHaveCount(0);
+    const feedback = route.startsWith("/en/chat/")
+      ? main.getByTestId("chat-error")
+      : main.getByRole("status").filter({ hasText: "Harness Research not available yet" });
+    await expect(feedback, "a missing owned ID must produce visible, explicit recovery feedback").toBeVisible();
+    await expect(feedback).not.toBeEmpty();
     await expect(main).not.toContainText(genericFailure);
     await expect(main).not.toContainText("Synthetic read-only history for route health.");
     await expect(main).not.toContainText("OFFLINE degraded research");

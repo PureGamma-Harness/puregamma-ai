@@ -89,14 +89,12 @@ function GraphNode({ node, locale, onClick, index }: { node: EvidenceNode; local
   const Icon = meta.icon;
   const label = locale === "zh" ? meta.label.zh : meta.label.en;
   const statusClass = node.status === "missing" ? "opacity-50" : node.status === "partial" ? "opacity-75" : "";
-  return (
-    <button
-      type="button"
-      onClick={() => onClick?.(node)}
-      className={`ocean-fade-in flex w-full items-center gap-2.5 border border-border-pg bg-bg-panel p-2.5 text-left hover:border-border-pg-strong ${statusClass}`}
-      style={{ animationDelay: `${index * 50}ms` }}
-      aria-label={`${label}: ${node.label}`}
-    >
+  const presentation = {
+    className: `ocean-fade-in flex w-full items-center gap-2.5 border border-border-pg bg-bg-panel p-2.5 text-left ${onClick ? "hover:border-border-pg-strong" : ""} ${statusClass}`,
+    style: { animationDelay: `${index * 50}ms` },
+    "aria-label": `${label}: ${node.label}`,
+  };
+  const content = <>
       <span className="grid h-7 w-7 shrink-0 place-items-center border border-border-pg" style={{ color: meta.color }} aria-hidden>
         <Icon className="h-3.5 w-3.5" />
       </span>
@@ -107,6 +105,8 @@ function GraphNode({ node, locale, onClick, index }: { node: EvidenceNode; local
       </span>
       {typeof node.count === "number" ? <span className="ml-auto shrink-0 text-xs tabular-nums text-text-pg-muted">{node.count}</span> : null}
       {node.status === "missing" ? <span className="shrink-0 text-[10px] text-text-pg-dim">{locale === "zh" ? "暂无" : "none"}</span> : null}
-    </button>
-  );
+    </>;
+  return onClick
+    ? <button type="button" onClick={() => onClick(node)} {...presentation}>{content}</button>
+    : <div role="group" {...presentation}>{content}</div>;
 }
