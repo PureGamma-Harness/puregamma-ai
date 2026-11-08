@@ -7,6 +7,10 @@ call the database directly; they can only produce MemoryProposals.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import unicodedata
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -41,6 +45,20 @@ _MAX_SUMMARY_TEXT_CHARS = 2000
 _MAX_SUMMARY_LIST_ITEMS = 50
 _MAX_MESSAGE_IDS = 200
 _MAX_ID_CHARS = 200
+
+
+def _query_terms(value: str) -> set[str]:
+    normalized = unicodedata.normalize("NFKC", value[:2000]).casefold()
+    terms = set(re.findall(r"[a-z0-9]{2,}", normalized))
+    for phrase in re.findall(r"[\u3400-\u9fff]+", normalized):
+        terms.update(phrase[index:index + 2] for index in range(len(phrase) - 1))
+    return set(sorted(terms)[:64])
+
+
+def _relevance(content: dict[str, Any], terms: set[str]) -> int:
+    # Deterministic lexical relevance, with bounded searchable text. This does
+    # not claim semantic recall or change the SQL ownership/consent filters.
+    return len(terms & _query_terms(json.dumps(content, ensure_ascii=False)[:4000]))
 
 
 def _redact_text_recursive(value: Any) -> Any:
@@ -124,9 +142,21 @@ class MemoryService:
         proposed_ttl_seconds: int | None = None,
         idempotency_key: str | None = None,
     ) -> MemoryProposal:
-        key = idempotency_key or f"memory-proposal:{user_id}:{namespace}:{content_hash(content)}"
+        key = f"memory-proposal:{user_id}:{namespace}:{content_hash(content)}"
+        if idempotency_key:
+            # Existing explicit keys remain retryable only by their owner.
+            legacy = db.query(MemoryProposal).filter(
+                MemoryProposal.user_id == user_id,
+                MemoryProposal.idempotency_key == idempotency_key,
+            ).first()
+            if legacy is not None:
+                return legacy
+            digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+            key = f"memory-proposal:{user_id}:explicit:{digest}"
         existing = (
-            db.query(MemoryProposal).filter(MemoryProposal.idempotency_key == key).first()
+            db.query(MemoryProposal).filter(
+                MemoryProposal.user_id == user_id, MemoryProposal.idempotency_key == key,
+            ).first()
         )
         if existing is not None:
             return existing  # idempotent
@@ -285,13 +315,15 @@ class MemoryService:
         user_id: str,
         namespaces: tuple[str, ...] = ("chat", "research"),
         limit: int = 8,
+        query: str | None = None,
     ) -> list[UserMemory]:
         """Model-context retrieval. The MemoryScopeSetting check is
         NON-BYPASSABLE by design: there is deliberately no parameter to skip
         it. User-facing listing (not model context) uses ``list_memories``.
         """
-        if limit > 32:
-            limit = 32
+        limit = max(0, min(limit, 32))
+        if limit == 0:
+            return []
         # A disabled scope is a hard opt-out: its memories are never
         # injected into model context, regardless of caller arguments.
         disabled = {
@@ -305,7 +337,7 @@ class MemoryService:
         if not effective_namespaces:
             return []
         now = utcnow()
-        query = (
+        memory_query = (
             db.query(UserMemory)
             .filter(
                 UserMemory.user_id == user_id,
@@ -314,7 +346,14 @@ class MemoryService:
             )
             .filter((UserMemory.expires_at.is_(None)) | (UserMemory.expires_at > now))
         )
-        rows = query.order_by(UserMemory.salience.desc(), UserMemory.updated_at.desc()).limit(limit).all()
+        terms = _query_terms(query or "")
+        candidate_limit = min(128, limit * 8) if terms else limit
+        rows = memory_query.order_by(UserMemory.salience.desc(), UserMemory.updated_at.desc(), UserMemory.id).limit(candidate_limit).all()
+        if terms:
+            # Stable sorting retains salience/recency as tie-breakers, after
+            # relevance to the current question within this eligible pool.
+            rows.sort(key=lambda row: _relevance(row.content_json, terms), reverse=True)
+        rows = rows[:limit]
         for row in rows:
             row.last_used_at = now
         _audit(
@@ -323,7 +362,7 @@ class MemoryService:
             action="read",
             target_type="memory",
             namespace=",".join(effective_namespaces),
-            detail={"count": len(rows)},
+            detail={"count": len(rows), "candidate_limit": candidate_limit, "query_ranked": bool(terms)},
             actor="system",
         )
         return rows
