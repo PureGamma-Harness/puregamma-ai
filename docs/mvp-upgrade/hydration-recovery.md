@@ -76,4 +76,3 @@ Candidate full production build: Node24,143pages passed. Same final HTTP test:
 original0/2, candidate2/2. The original smoke14 and complete auth18 (including the two new HTTP cases)
 also pass32/32 without any diagnostic hooks. Typecheck passes. Final integrated
 route modes,92 focused checks and hosted CI remain required before merge.
-
