@@ -10,7 +10,7 @@ import re
 from typing import Iterable
 
 CITATION_POLICY_VERSION = "numeric-marker-v1"
-_BRACKET_MARKER = re.compile(r"(?<!\\)\[([^\[\]\r\n]*)\]")
+_BRACKET_MARKER = re.compile(r"(?<!\\)\[([^\[\]]*)\]")
 
 
 @dataclass(frozen=True)
