@@ -37,5 +37,10 @@ route navigation have one unambiguous main region.
 
 Actual-source focused checks exercise ten admin error shapes, both localized
 successful daily settings paths and five prerequisite failures per locale.
+Independent review reproduced a framework-control handling gap in the initial
+scoped catch: Next dynamic-request, redirect and not-found signals must propagate.
+The public `unstable_rethrow` helper runs before ordinary service-error recovery;
+three actual Next control cases protect that boundary.
+
 The API/JEV landmark corrections are covered by the unchanged whole-route unique-main
 assertion. Final production artifact checks remain pending.

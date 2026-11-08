@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import { DailyPushSettings } from "@/components/daily-push-settings";
 import { ErrorState, PageHeader } from "@/components/puregamma";
@@ -24,7 +25,8 @@ export default async function DailyPushPage({ params: paramsPromise }: { params:
     if (!subscription.unavailable && subscription.plan && data?.preference && Array.isArray(data.history)) {
       settings = <DailyPushSettings initial={data.preference} initialHistory={data.history} locale={locale} plan={subscription.plan} />;
     }
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error);
     // Do not fabricate editable preferences when a required read failed.
   }
   const zh = locale === "zh";

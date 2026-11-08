@@ -98,3 +98,21 @@ for (const locale of ['en', 'zh']) {
     }
   });
 }
+
+// Framework control flow must reach Next rather than becoming a service alert.
+const { redirect, notFound } = require('next/navigation');
+const { DynamicServerError } = require('next/dist/client/components/hooks-server-context');
+const controls = [
+  ['dynamic request', () => { throw new DynamicServerError('cookies'); }],
+  ['redirect', () => redirect('/en/login')],
+  ['not found', () => notFound()],
+];
+for (const [name, signal] of controls) {
+  test(`daily delivery preserves Next ${name} control flow`, async () => {
+    let original;
+    try { signal(); } catch (error) { original = error; }
+    assert.ok(original);
+    const page = loadDaily(async () => { throw original; }, async () => ({ plan: 'Pro' }));
+    await assert.rejects(page({ params: Promise.resolve({ locale: 'en' }) }), error => error === original);
+  });
+}
