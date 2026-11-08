@@ -270,3 +270,57 @@ def test_stream_uses_structured_evidence_before_the_actual_user_question(db, nor
     assert payload["context_quality"]["sufficient"] is False
     assert payload["context_selection"]["omitted_records"] == ["get_market_quote"]
     assert captured[-1].role == "user" and captured[-1].content == question
+
+
+def test_replaying_an_older_turn_excludes_future_messages(db, normal_user, monkeypatch):
+    _settings(monkeypatch)
+    conversation, current = _turn(db, normal_user, "Original BTC question")
+    when = utcnow()
+    current.created_at = when
+    for offset, role, content in [(-1, "assistant", "Prior context"),
+                                   (1, "user", "A future unrelated ETH question"),
+                                   (2, "assistant", "The future answer")]:
+        db.add(AgentMessage(conversation_id=conversation.id, user_id=normal_user.id, role=role,
+                            content=content, status="completed", context_json={},
+                            created_at=when + timedelta(seconds=offset)))
+    db.commit()
+    messages = agent_service._context_messages(db, conversation, current.id)
+    assert [message.content for message in messages] == ["Prior context", current.content]
+    assert messages[-1].role == "user"
+
+
+def test_equal_timestamp_turn_boundary_is_deterministic(db, normal_user, monkeypatch):
+    _settings(monkeypatch)
+    conversation, current = _turn(db, normal_user, "Current question")
+    current.id = "current-m"
+    for identifier, content in [("current-a", "Earlier tied context"), ("current-z", "Later tied question")]:
+        db.add(AgentMessage(id=identifier, conversation_id=conversation.id, user_id=normal_user.id,
+                            role="user", content=content, status="completed", context_json={},
+                            created_at=current.created_at))
+    db.commit()
+    for _ in range(2):
+        messages = agent_service._context_messages(db, conversation, current.id)
+        assert [message.content for message in messages] == ["Earlier tied context", current.content]
+
+
+def test_current_turn_keeps_its_attachments_when_future_turns_fill_the_window(db, normal_user, monkeypatch):
+    _settings(monkeypatch)
+    conversation, current = _turn(db, normal_user, "Read my original note")
+    current.context_json = {"attachments": [{"name": "owned-note.txt", "content": "The original file contents"}]}
+    for index in range(20):
+        db.add(AgentMessage(conversation_id=conversation.id, user_id=normal_user.id, role="user",
+                            content=f"Future turn {index}", status="completed", context_json={},
+                            created_at=current.created_at + timedelta(seconds=index + 1)))
+    db.commit()
+    messages = agent_service._context_messages(db, conversation, current.id)
+    assert len(messages) == 1
+    assert "The original file contents" in messages[0].content
+    assert "Future turn" not in messages[0].content
+
+
+def test_foreign_turn_id_cannot_anchor_context(db, normal_user, max_user, monkeypatch):
+    _settings(monkeypatch)
+    owned_conversation, _ = _turn(db, normal_user)
+    _, foreign_message = _turn(db, max_user, "Other user's question")
+    with pytest.raises(LookupError):
+        agent_service._context_messages(db, owned_conversation, foreign_message.id)

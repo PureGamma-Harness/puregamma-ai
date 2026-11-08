@@ -24,6 +24,9 @@ Confirmed gaps at base `48fe315`:
    leave invalid JSON and silently remove trailing portfolio context.
 4. Explicit proposal idempotency keys are looked up globally, allowing a service
    caller's key collision to return another tenant's proposal.
+5. Independent review found that the history window could contain questions and
+   answers submitted after the run's own user turn; an older turn outside the
+   recent window also lost its attachment context.
 
 Implement these bounded context-engineering patterns:
 
@@ -54,6 +57,9 @@ Implement these bounded context-engineering patterns:
   remains visible to the model.
 - Same-tenant retries are idempotent, same explicit keys across tenants are
   isolated, and owned pre-upgrade explicit keys still retry successfully.
+- An older run's transcript ends at its own owned turn. Future messages are
+  excluded, equal timestamps use an explicit deterministic ID tie-breaker, and
+  the current turn retains its attachments even outside the latest window.
 - Existing Agent streaming, attachment, metering, prompt-registry and memory
   security suites pass with synthetic data and no external provider calls.
 
@@ -70,11 +76,14 @@ SHA-256 digest; owned legacy keys remain retryable without rewriting old rows.
 The initial nine offline regression cases produced **4 failed / 5 passed** on the
 original source (consented memory loss, negative limit, tenant key collision and
 the missing query-aware retrieval capability). After implementation those same
-nine passed. The expanded suite has **23 new cases**; together with existing
+nine passed. Independent review added four historical-turn replay cases; all
+four failed against the initial candidate and passed after the transcript-boundary
+repair. The final expanded suite has **27 new cases**; together with existing
 memory, Agent planning, attachments, online fallback, billing and answer API
-regressions, **98 passed**, zero failures/errors/skips. Evidence is retained in
+regressions, **102 passed**, zero failures/errors/skips. Evidence is retained in
 `/workspace/scratch/round6-agent-context-red.xml` and
-`/workspace/scratch/round6-agent-related-final.xml` with corresponding logs.
+`/workspace/scratch/round6-agent-history-red.xml` and
+`/workspace/scratch/round6-agent-history-final.xml` with corresponding logs.
 
 ```sh
 /workspace/puregamma-ai/.venv/bin/python -m pytest \
@@ -82,8 +91,8 @@ regressions, **98 passed**, zero failures/errors/skips. Evidence is retained in
   tests/security/test_memory_service.py tests/unit/test_agent_runtime.py \
   tests/unit/test_chat_workspace.py tests/unit/test_agent_online_research.py \
   tests/unit/test_agent_metering.py tests/integration/test_agent_answer_api.py \
-  --basetemp=/workspace/scratch/pytest-round6-agent-related-final \
-  --junitxml=/workspace/scratch/round6-agent-related-final.xml
+  --basetemp=/workspace/scratch/pytest-round6-agent-history-final \
+  --junitxml=/workspace/scratch/round6-agent-history-final.xml
 ```
 
 Self-review checked that scope/ownership/TTL filters execute before ranking; no
@@ -94,6 +103,13 @@ source metadata never renumbers a later citation. A captured real Agent stream
 checks valid bounded JSON, completed settlement and the final question ordering
 using a synthetic model provider and stored tool result. No external model,
 financial transaction, deployment or feature-flag change was performed.
+
+The history anchor is resolved by both conversation and owner before any replay;
+an unknown or foreign anchor is refused. Only completed prior messages enter the
+bounded transcript, and the anchor itself is appended once. ID ordering breaks
+timestamp ties deterministically; it is not claimed to reconstruct wall-clock
+causality between records with identical timestamps. Existing internal use of
+an owned assistant anchor remains supported; production runs use their user turn.
 
 ### Modern-method references and deliberate limits
 

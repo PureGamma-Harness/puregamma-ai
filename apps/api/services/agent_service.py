@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 
-from sqlalchemy import text
+from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import Session
 
 from apps.api.config import get_settings
@@ -591,8 +591,26 @@ def _finalize_disconnected_run(run_id: str, user_id: str, *, reason: str) -> Non
 
 def _context_messages(db: Session, conversation: AgentConversation, current_user_message_id: str) -> list[ChatMessage]:
     settings = get_settings()
-    rows = db.query(AgentMessage).filter(AgentMessage.conversation_id == conversation.id, AgentMessage.status == "completed").order_by(AgentMessage.created_at.desc()).limit(settings.agent_recent_messages).all()
-    rows.reverse()
+    current_turn = db.query(AgentMessage).filter_by(
+        id=current_user_message_id, conversation_id=conversation.id,
+        user_id=conversation.user_id,
+    ).one_or_none()
+    if current_turn is None:
+        raise LookupError("Agent context turn not found")
+    # A run can stream after a newer question has already been stored. Its
+    # transcript ends at its own turn: future questions/answers must not alter
+    # what it answers. IDs make equal timestamps deterministic without assuming
+    # UUID ordering is a wall-clock chronology.
+    history_limit = max(0, settings.agent_recent_messages - 1)
+    history = db.query(AgentMessage).filter(
+        AgentMessage.conversation_id == conversation.id,
+        AgentMessage.user_id == conversation.user_id,
+        AgentMessage.status == "completed",
+        or_(AgentMessage.created_at < current_turn.created_at,
+            and_(AgentMessage.created_at == current_turn.created_at,
+                 AgentMessage.id < current_turn.id)),
+    ).order_by(AgentMessage.created_at.desc(), AgentMessage.id.desc()).limit(history_limit).all()
+    rows = [*reversed(history), current_turn]
     messages = []
     if conversation.summary:
         messages.append(ChatMessage(role="system", content=f"Earlier conversation summary:\n{conversation.summary[:4000]}"))
@@ -606,10 +624,6 @@ def _context_messages(db: Session, conversation: AgentConversation, current_user
             if consenting_user is not None and consenting_user.memory_consent_granted_at is not None:
                 from packages.memory.service import MemoryService
 
-                current_turn = db.query(AgentMessage).filter_by(
-                    id=current_user_message_id, conversation_id=conversation.id,
-                    user_id=conversation.user_id, role="user",
-                ).one_or_none()
                 memories = MemoryService(
                     auto_accept_low_risk=settings.memory_auto_accept_low_risk,
                     summary_ttl_days=settings.memory_summary_ttl_days,
@@ -618,7 +632,7 @@ def _context_messages(db: Session, conversation: AgentConversation, current_user
                     user_id=conversation.user_id,
                     namespaces=("chat", "research"),
                     limit=6,
-                    query=current_turn.content if current_turn is not None else None,
+                    query=current_turn.content if current_turn.role == "user" else None,
                 )
                 if memories:
                     messages.append(
@@ -640,7 +654,6 @@ def _context_messages(db: Session, conversation: AgentConversation, current_user
     # whole — a clipped file is worse than an absent turn, because the model has
     # no way to tell that it is reading a fragment.
     budget = max(settings.agent_max_context_chars, 56000)
-    current_id = current_user_message_id
     # A stored attachment the user removed keeps its record but has no bytes and
     # no text left, so replaying it would hand the model an empty file it cannot
     # tell apart from a real one — or, for a turn stored before the removal, the
@@ -702,12 +715,6 @@ def _context_messages(db: Session, conversation: AgentConversation, current_user
             if item.get("content")
         )
         candidates.append(ChatMessage(role=row.role, content=content + ("\n" + file_text if file_text else ""), images=images_by_row.get(row.id, [])))
-    if current_id not in {row.id for row in rows}:
-        # The run's own message must be present even if it fell outside the
-        # recent-message query (a run started against an older turn).
-        current_row = db.get(AgentMessage, current_id)
-        if current_row is not None:
-            candidates.append(ChatMessage(role=current_row.role, content=current_row.content[:6000]))
     dropped = 0
     while len(candidates) > 1 and sum(len(item.content) for item in candidates) > budget:
         candidates.pop(0)
