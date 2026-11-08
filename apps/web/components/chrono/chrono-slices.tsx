@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 import { gsap, ScrollTrigger, useGSAP } from "@/components/chrono/motion";
-import { useChronoTierReactive, useHtmlDataset } from "@/lib/chrono";
+import { resolveChronoTier, useChronoTierReactive, useHtmlDataset } from "@/lib/chrono";
 
 /**
  * Scroll "time-slice" narrative for exploration surfaces.
@@ -25,7 +25,7 @@ export function ChronoSlices({ children, className = "" }: { children: ReactNode
   const style = useHtmlDataset("visualStyle");
 
   useGSAP(() => {
-    if (style === "classic" || tier === "static" || !rootRef.current) return;
+    if (document.documentElement.dataset.visualStyle !== "glass" || resolveChronoTier() === "static" || !rootRef.current) return;
     const slices = Array.from(rootRef.current.querySelectorAll<HTMLElement>("[data-chrono-slice], .chrono-slice"));
     if (!slices.length) return;
     gsap.set(slices, { opacity: 0, y: 22 });
@@ -38,7 +38,7 @@ export function ChronoSlices({ children, className = "" }: { children: ReactNode
     });
     requestAnimationFrame(() => ScrollTrigger.refresh());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, { scope: rootRef, dependencies: [tier, style] });
+  }, { scope: rootRef, dependencies: [tier, style], revertOnUpdate: true });
 
   return (
     <div ref={rootRef} className={className}>
