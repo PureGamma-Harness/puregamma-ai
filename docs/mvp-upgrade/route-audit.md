@@ -151,7 +151,16 @@ These are baseline findings. Candidate fixes must be reviewed and tested before 
 
 ## Candidate review log
 
-Pending implementation handoffs. Each review entry will name the exact commit/tree or frozen file snapshot, files reviewed, prompt acceptance criteria, targeted checks and scope limits. Passing TypeScript/build alone does not resolve the interactive findings above. The final aggregate outcome belongs to the root's integration report and CI record.
+The final aggregate outcome belongs to root's integration report and CI record. Independent checks below do not claim every route received an interactive browser test.
+
+| Candidate | Independent reviewer result | Independent checks | Boundary / evidence |
+| --- | --- | --- | --- |
+| UI foundation `ab94314261bc69eb4830c01fe130eb4db41ec166` | Product reviewer: no blocking finding across13 changed files | Actual-source Node22 and24 each9/9; four real Chromium checks on the frozen production artifact: en/zh modal focus/Escape/return, backdrop+desktop resize cleanup, skip navigation/focus across both appearances | Author's full10 browser checks and Node24 build143 are attributed to the author, not rerun here. Report `/workspace/scratch/round6-foundation-independent-review.json`. Report deep link depends on the coordinated research slice. |
+| Chart reliability `fd54079` | Operations reviewer: no blocking finding | Complete source/test/prompt review and independent4/4 bounded-data cases; author real Chromium8/8 plus type/lint pass | Missing/delayed/rejecting/hung renderers recover without stale canvas corruption. Preview is partial; controlled local API does not prove CDN availability or actual3D rendering. `/workspace/scratch/round6-chart-independent-review.json`; [chart brief](./chart-reliability.md). |
+| Research UI | Review in progress; concrete issues returned before approval | Capability error classification must accept null/undefined rejection; stopping while setup is pending must prevent paid message submission and release the composer; a failed unrelated memory read must not block privacy-reducing actions | These are acceptance corrections, not permission/feature-gate expansions. Await frozen corrected candidate and targeted regression evidence. |
+| Operations UI | Initial source review; final snapshot validation in progress | Native named confirmation, unknown-vs-zero balance, exact bounded amount validation, clipboard recovery, latest-request filtering, last-good portfolio snapshot, truthful checkout copy | Author is addressing actual mobile overflow/pointer behavior before final handoff; no passing final browser claim yet. |
+
+Passing TypeScript/build alone does not resolve the interactive findings above. Findings F01–F13 remain recorded as baseline facts; only specific candidate evidence changes their final disposition.
 
 ## Self-review of the audit
 
