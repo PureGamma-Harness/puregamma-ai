@@ -75,7 +75,26 @@ for (const entry of canonical) {
         const main = page.getByRole("main");
         await expect(main).toBeVisible();
         await expect(main).not.toContainText(genericFailure);
-        await expect.poll(async () => (await main.innerText()).replace(/\s/g, "").length).toBeGreaterThan(30);
+        if (localPattern(entry) === "/docs") {
+          // The embedded third-party document is deliberately blocked offline.
+          // Its local recovery controls have a semantic contract; Chinese copy
+          // must not be judged by the length of the equivalent English text.
+          const docsUrl = locale === "zh"
+            ? "https://puregamma-ai.gitbook.io/puregamma-ai/"
+            : "https://puregamma-ai.gitbook.io/puregamma-ai/english/getting-started";
+          await expect(main.getByRole("heading", { level: 1, name: locale === "zh" ? "帮助文档" : "Documentation", exact: true })).toBeVisible();
+          const externalLink = main.getByRole("link", { name: locale === "zh" ? "新窗口打开" : "Open in new tab", exact: true });
+          await expect(externalLink).toBeVisible();
+          await expect(externalLink).toHaveAttribute("href", docsUrl);
+          await expect(externalLink).toHaveAttribute("target", "_blank");
+          expect((await externalLink.getAttribute("rel") || "").toLowerCase().split(/\s+/)).toEqual(expect.arrayContaining(["noopener", "noreferrer"]));
+          const preview = main.locator("iframe");
+          await expect(preview).toBeVisible();
+          await expect(preview).toHaveAttribute("title", locale === "zh" ? "PureGamma AI 帮助文档" : "PureGamma AI documentation");
+          await expect(preview).toHaveAttribute("src", docsUrl);
+        } else {
+          await expect.poll(async () => (await main.innerText()).replace(/\s/g, "").length).toBeGreaterThan(30);
+        }
         await expect(main.locator('[aria-busy="true"]')).toHaveCount(0);
 
         if (localPattern(entry) === `/chat/[conversationId]`) await expect(main).toContainText("Synthetic read-only history for route health.");

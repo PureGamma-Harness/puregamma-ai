@@ -111,3 +111,27 @@ width is asserted even when no main child explains the overflow, and every
 backend listener/connection closes in `finally`. The browser executable is
 selected only when explicitly configured; CI may use Playwright's downloaded
 browser.
+
+### First frozen production-artifact run
+
+The complete full-mode matrix against integrated commit
+`ba4bc77f08eeba137078707be05646a06059570d` completed228 cases:
+204 passed,24 failed,0 skipped,0 flaky. All failures were individually classified:
+legacy query loss; structured admin errors rendered as React children; nested
+main landmarks in API/JEV; an uncaught Daily Push server read; decorative
+Secretary desktop overflow; unbroken Backtest error text on mobile; and a
+test-contract bias on the Chinese documentation shell. Product fixes belong to
+their feature owners and require another frozen-artifact run.
+
+The documentation shell's23 Chinese characters express the same heading,
+description and recovery action as its longer English copy. Instead of reducing
+the general content threshold, `/docs` now has a stronger dedicated contract:
+the visible localized heading, correctly localized GitBook destination, named
+external link with `_blank` and both safe-rel tokens, and a visible iframe with
+the proper localized title and URL. Unique main, generic-boundary rejection,
+busy-state, uncaught-error and viewport checks remain unchanged. The blocked
+third-party document's body is not claimed to be available.
+
+Initial evidence is archived under `/workspace/scratch/round6-route-full-initial*`.
+The revised semantic contract and production repairs are not claimed green until
+the subsequent integrated browser run completes.
