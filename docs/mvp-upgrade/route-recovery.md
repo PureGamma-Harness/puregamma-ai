@@ -17,7 +17,8 @@ preferences or plan, retain the page context and show explicit localized retry
 feedback. Do not fabricate preferences, a subscription or notification delivery.
 Use the existing native components and server request policy.
 
-The API documentation component also nests a second `main` inside the shared
+The API documentation component and the JEV advisory page also nest a second
+`main` inside the shared
 layout landmark. Use an ordinary content container so assistive technology and
 route navigation have one unambiguous main region.
 
@@ -36,5 +37,5 @@ route navigation have one unambiguous main region.
 
 Actual-source focused checks exercise ten admin error shapes, both localized
 successful daily settings paths and five prerequisite failures per locale.
-The API landmark correction is covered by the unchanged whole-route unique-main
+The API/JEV landmark corrections are covered by the unchanged whole-route unique-main
 assertion. Final production artifact checks remain pending.

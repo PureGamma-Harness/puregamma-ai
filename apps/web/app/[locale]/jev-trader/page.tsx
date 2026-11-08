@@ -4,7 +4,7 @@ import type { Locale } from "@/i18n/routing";
 export default async function JevTraderPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
   const params = await paramsPromise;
   const zh = params.locale === "zh";
-  return <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+  return <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
     <div className="mb-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-text-pg-muted">Harness · TypeSafe JEV</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">{zh ? "Jev 顾问" : "Jev advisor"}</h1>
@@ -13,5 +13,5 @@ export default async function JevTraderPage({ params: paramsPromise }: { params:
       </p>
     </div>
     <JevAdvisoryConsole locale={params.locale} />
-  </main>;
+  </div>;
 }
