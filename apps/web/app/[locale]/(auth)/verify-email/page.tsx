@@ -23,6 +23,8 @@ export default function VerifyEmailPage() {
   const zh = locale === "zh";
 
   useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) {
       setStatus("error");
@@ -31,21 +33,24 @@ export default function VerifyEmailPage() {
     }
     emailVerify(token)
       .then(() => {
+        if (!active) return;
         setStatus("success");
-        setTimeout(() => router.push(`/${locale}/chat`), 3000);
+        timer = setTimeout(() => router.push(withLocale(locale, "/chat")), 3000);
       })
       .catch(() => {
+        if (!active) return;
         setStatus("error");
         setErrorMessage(t(locale, "common.auth.verifyEmailError"));
       });
+    return () => { active = false; if (timer) clearTimeout(timer); };
   }, [locale, router]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resendEmail) return;
+    if (!resendEmail || resending) return;
     setResending(true);
     try {
-      await resendVerificationEmail(resendEmail);
+      await resendVerificationEmail(resendEmail.trim());
       setResent(true);
     } catch {
       setErrorMessage(zh ? "发送失败，请稍后重试" : "Failed to send. Please try again later.");
@@ -74,16 +79,21 @@ export default function VerifyEmailPage() {
           ) : status === "success" ? (
             <div className="flex flex-col items-center gap-3 py-4">
               <CheckCircle className="h-8 w-8 text-status-positive" />
-              <p className="text-sm text-text-pg">{t(locale, "common.auth.verifyEmailSuccess")}</p>
+              <p role="status" className="text-sm text-text-pg">{t(locale, "common.auth.verifyEmailSuccess")}</p>
+              <Link href={withLocale(locale, "/chat")} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">{zh ? "继续到 Agent" : "Continue to Agent"}</Link>
               <p className="text-xs text-text-pg-muted">{zh ? "即将跳转到控制台..." : "Redirecting to chat..."}</p>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 py-4">
               <XCircle className="h-8 w-8 text-status-negative" />
-              <p className="text-sm text-status-negative">{errorMessage}</p>
+              <p role="alert" className="text-sm text-status-negative">{errorMessage}</p>
               {!resent ? (
                 <form onSubmit={handleResend} className="flex w-full flex-col items-center gap-3">
+                  <label htmlFor="verification-email" className="self-start text-sm font-medium">{zh ? "邮箱" : "Email address"}</label>
                   <input
+                    id="verification-email"
+                    name="email"
+                    autoComplete="email"
                     type="email"
                     value={resendEmail}
                     onChange={(e) => setResendEmail(e.target.value)}

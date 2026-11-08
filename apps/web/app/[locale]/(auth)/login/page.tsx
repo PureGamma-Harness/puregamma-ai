@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Chrome, Loader2 } from "lucide-react";
@@ -12,6 +12,7 @@ import type { CaptchaResult } from "@/components/puzzle-captcha";
 import { useLocale } from "@/components/i18n/LocaleProvider";
 import { emailLogin, extractApiError, googleLogin, resendVerificationEmail } from "@/lib/api";
 import { withLocale } from "@/i18n/routing";
+import { safeReturnTo } from "@/lib/auth-navigation";
 import { t } from "@/lib/translations";
 
 
@@ -21,17 +22,21 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [verifyError, setVerifyError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [resending, setResending] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [captchaOpen, setCaptchaOpen] = useState(false);
   const [captchaError, setCaptchaError] = useState("");
   const [captchaKey, setCaptchaKey] = useState(0);
   const [captchaRetry, setCaptchaRetry] = useState(0);
+  const captchaOpener = useRef<HTMLElement | null>(null);
   const zh = locale === "zh";
 
   const handleGoogleLogin = async () => {
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const result = await googleLogin(locale);
       window.location.href = result.auth_url;
@@ -50,8 +55,11 @@ export default function LoginPage() {
   const handleEmailLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || busy) return;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    captchaOpener.current = submitter instanceof HTMLElement ? submitter : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setError("");
     setVerifyError("");
+    setNotice("");
     openCaptcha();
   };
 
@@ -62,7 +70,7 @@ export default function LoginPage() {
       await emailLogin(email.trim(), password, { captcha_id: result.captchaId, captcha_offset: result.offset });
       setCaptchaOpen(false);
       const returnTo = new URLSearchParams(window.location.search).get("returnTo");
-      window.location.href = returnTo?.startsWith("/") && !returnTo.startsWith("//") ? returnTo : `/${locale}/chat`;
+      window.location.href = safeReturnTo(returnTo, `/${locale}/chat`);
     } catch (err: unknown) {
       const apiError = extractApiError(err);
       if (apiError.code === "CAPTCHA_FAILED") {
@@ -99,16 +107,21 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-4 border border-border-pg bg-bg-panel p-6 rounded-2xl">
-          {error ? <p className="border border-border-pg bg-bg-panel-muted px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
+          {error ? <p role="alert" className="border border-border-pg bg-bg-panel-muted px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
+          {notice ? <p role="status" className="rounded-lg border border-border-pg bg-bg-panel-muted px-4 py-2.5 text-sm text-status-positive">{notice}</p> : null}
           {verifyError ? (
             <div className="border border-border-pg bg-bg-panel-muted px-4 py-2.5 space-y-2 rounded-lg">
-              <p className="text-sm text-status-negative">{t(locale, "common.auth.emailNotVerified")}</p>
-              <button type="button" onClick={async () => { setVerifyError(""); try { await resendVerificationEmail(verifyError); setError(t(locale, "common.auth.verificationResent")); } catch { setError(zh ? "发送失败，请稍后重试" : "Failed to send"); } }} className="text-sm font-medium text-text-pg underline underline-offset-2">{t(locale, "common.auth.resendVerification")}</button>
+              <p role="alert" className="text-sm text-status-negative">{t(locale, "common.auth.emailNotVerified")}</p>
+              <button type="button" disabled={resending} onClick={async () => { setResending(true); setError(""); try { await resendVerificationEmail(verifyError); setVerifyError(""); setNotice(t(locale, "common.auth.verificationResent")); } catch { setError(zh ? "发送失败，请稍后重试" : "Failed to send. Please try again."); } finally { setResending(false); } }} className="min-h-10 text-sm font-medium text-text-pg underline underline-offset-2 disabled:opacity-50">{t(locale, "common.auth.resendVerification")}</button>
             </div>
           ) : null}
 
-          <form onSubmit={handleEmailLogin} className="space-y-3">
+          <form onSubmit={handleEmailLogin} aria-busy={busy} className="space-y-3">
+            <label htmlFor="login-email" className="block text-sm font-medium">{zh ? "邮箱" : "Email address"}</label>
             <input
+              id="login-email"
+              name="email"
+              autoComplete="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -116,7 +129,10 @@ export default function LoginPage() {
               className="w-full border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg placeholder:text-text-pg-dim outline-none focus:border-border-pg-strong rounded-lg"
               required
             />
+            <label htmlFor="login-password" className="block text-sm font-medium">{zh ? "密码" : "Password"}</label>
             <PasswordInput
+              id="login-password"
+              name="password"
               value={password}
               onChange={setPassword}
               placeholder={t(locale, "common.auth.passwordPlaceholder")}
@@ -162,6 +178,7 @@ export default function LoginPage() {
 
       <CaptchaModal
         open={captchaOpen}
+        returnFocusTo={captchaOpener.current}
         busy={busy}
         error={captchaError}
         resetKey={captchaKey}
