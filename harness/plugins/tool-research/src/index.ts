@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { ResearchDocument } from '@puregamma/dsh-research'
 import type {} from '@puregamma/dsh-research'
+import { renderToolDocument } from '../../tool-output.js'
 
 export const name = 'puregamma-tool-research'
 export const inject = ['tools', 'pgResearch']
@@ -30,17 +30,6 @@ function documentSchema() {
   }
 }
 
-function renderDocument(value: {
-  kind: ResearchDocument['kind']
-  asOf?: string
-  observedAt: string
-  degraded: boolean
-  source: string
-}): string {
-  const effectiveAt = value.asOf ?? value.observedAt
-  return `${value.kind} research as of ${effectiveAt} from ${value.source}${value.degraded ? ' (degraded)' : ''}.`
-}
-
 function todayTool(ctx: Context) {
   return defineTool({
     name: 'research_today',
@@ -50,7 +39,7 @@ function todayTool(ctx: Context) {
     },
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute(args) {
@@ -69,7 +58,7 @@ function overnightTool(ctx: Context) {
     },
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute(args) {
@@ -86,7 +75,7 @@ function portfolioImpactTool(ctx: Context) {
     parameters: {},
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute() {
@@ -105,7 +94,7 @@ function upcomingEventsTool(ctx: Context) {
     },
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute(args) {
@@ -124,7 +113,7 @@ function opportunitiesTool(ctx: Context) {
     },
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute(args) {
@@ -141,7 +130,7 @@ function alertsTool(ctx: Context) {
     parameters: {},
     output: {
       schema: documentSchema(),
-      render: (_args, value) => [{ type: 'text', text: renderDocument(value) }],
+      render: (_args, value) => [{ type: 'text', text: renderToolDocument(value) }],
     },
     isConcurrencySafe: () => true,
     async execute() {
