@@ -37,6 +37,7 @@ whole-route health and mutation journeys as separate evidence.
 | Native tool evidence | [Harness tool output](harness-tool-output.md) | Real SDK evidence projection, actual sandbox state, provenance/health priority and explicit bounded omissions |
 | Chart reliability | [Charts](chart-reliability.md) | Announced loading/error, retry, per-attempt canvas ownership and bounded preview of actual supplied values |
 | Provider status | [Data sources](data-source-status.md) | Preserve server availability and distinguish empty, unauthorized and failed reads without enabling a provider |
+| Static first paint | [SSR and hydration](hydration-recovery.md) | Real setup headings, progress and controls directly inside server-rendered main; preserve page-owned loading and error recovery |
 | Route recovery | [Scoped recovery](route-recovery.md) | Renderable admin errors, daily settings recovery with Next control signals preserved, single API/advisory main landmarks |
 | Legacy navigation | [Query preservation](legacy-query-preservation.md) | Preserve repeated, empty and Unicode query values across all locale aliases without changing API handling or release gates |
 | Layout containment | [Route geometry](route-geometry.md) | Contain secretary artwork and wrap long backtest errors at desktop/mobile widths |
@@ -63,11 +64,15 @@ The first frozen full-mode audit ran all 228 cases and exposed alias query loss,
 admin error rendering, missing daily settings recovery, duplicate main landmarks
 and two layout overflows. Those findings have explicit repairs and independent
 reviews. A Chinese embedded-docs shell needs a dedicated semantic check instead
-of an arbitrary English-oriented text-length threshold. The original auth
-sequence also recorded one initial-load hydration error; the unmodified complete
-16-case sequence subsequently passed and bounded diagnostic attempts did not
-reproduce it. Final acceptance uses fresh artifacts, with the initial evidence
-retained instead of labeling that transient error as a proven code fix.
+of an arbitrary English-oriented text-length threshold. Native navigation
+acceptance also exposed recurrent hydration errors in onboarding and Options
+history. The final design removes the newly added locale-wide loading boundary
+and restores direct server rendering of static setup content. A positive inert
+HTML regression checks actual main descendants before application scripts run;
+page-owned loading and shared error recovery remain. Internal React host
+attribution was not captured, so the repair claims the proved SSR contract and
+requires unchanged normal navigation/error checks and fresh CI. Initial failures
+and diagnostic results remain separate from final acceptance evidence.
 
 Backend source was frozen for a full 1523-pass regression with four pre-existing
 expected failures and one opt-in load skip. A later one-line citation-parser

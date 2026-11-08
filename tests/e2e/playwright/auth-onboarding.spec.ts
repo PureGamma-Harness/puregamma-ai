@@ -170,3 +170,42 @@ test("OAuth return destinations reject backslash and control-character escapes",
   }
   expect(state.googleTargets).toEqual(["/en/chat", "/en/chat"]);
 });
+
+
+test("@http setup documents expose real main content before JavaScript", async ({ request, page }) => {
+  const titles = {
+    en: { assets: "Choose assets to track", style: "Choose your research style", channels: "How would you like to receive research?" },
+    zh: { assets: "选择需要跟踪的资产", style: "选择你的研究风格", channels: "你希望通过什么渠道接收研究内容？" },
+  };
+  for (const locale of ["en", "zh"] as const) {
+    for (const step of ["assets", "style", "channels"] as const) {
+      const response = await request.get(`/${locale}/onboarding/${step}`, {
+        headers: { Cookie: "pg_session=offline-mvp-auth" },
+      });
+      expect(response.status()).toBe(200);
+      // DOMParser creates an inert document: application scripts never run and
+      // hidden streamed segments cannot masquerade as visible main content.
+      const workspace = await page.evaluate((html) => {
+        const document = new DOMParser().parseFromString(html, "text/html");
+        const main = document.querySelector("main#main-content");
+        const heading = main?.querySelector("h1");
+        return {
+          mainCount: document.querySelectorAll("main").length,
+          heading: heading?.textContent?.trim(),
+          headingHidden: Boolean(heading?.closest("[hidden]")),
+          progress: main?.querySelector("nav[aria-label]")?.getAttribute("aria-label"),
+          currentSteps: main?.querySelectorAll('[aria-current="step"]').length,
+          selectableChoices: main?.querySelectorAll("button[aria-pressed]").length || 0,
+          form: Boolean(main?.querySelector("form")),
+        };
+      }, await response.text());
+      expect(workspace.mainCount).toBe(1);
+      expect(workspace.heading, `${locale}/${step} must render its actual heading inside main`).toBe(titles[locale][step]);
+      expect(workspace.headingHidden).toBe(false);
+      expect(workspace.progress).toBe(locale === "zh" ? "首次设置进度" : "Setup progress");
+      expect(workspace.currentSteps).toBe(1);
+      if (step === "channels") expect(workspace.form).toBe(true);
+      else expect(workspace.selectableChoices).toBeGreaterThan(0);
+    }
+  }
+});

@@ -43,14 +43,13 @@ success. Those technologies do not solve the observed workflow defects.
 5. Email delivery accurately describes the account-email-only backend contract;
    recipient entry must not suggest arbitrary email delivery is supported.
 6. Selection states, a three-step progress navigation, labels, mobile layouts,
-   and shared loading/error feedback work in both locales.
+   and shared recovery/page-owned loading feedback work in both locales.
 
 ## Method and validation
 
 Follow the existing React controlled-form model with functional updates and
 explicit request states; use WAI-ARIA button state and live-region guidance,
-native browser constraint validation, and Next.js segment loading/error
-boundaries. References: https://react.dev/reference/react/useState,
+native browser constraint validation, and Next.js segment error boundaries and page-owned loading feedback. References: https://react.dev/reference/react/useState,
 https://nextjs.org/docs/app/api-reference/file-conventions/error,
 https://www.w3.org/WAI/ARIA/apg/patterns/button/.
 
@@ -68,7 +67,7 @@ The final source uses native CAPTCHA modality with an explicit SubmitEvent opene
 
 Setup research choices are validated independently and remain in tab memory when storage reads/writes fail; a failed write cannot resurrect older readable storage. Recipients are not newly persisted. Delivery uses the server-owned account email and only offers Telegram when the actual account plan permits it; iMessage remains subject to its existing verification workflow. A503 save leaves the form and recipients available for retry; only401 asks for login with the correct return path. A committed server save still navigates when local caches are unavailable.
 
-Validation on the final production artifact: **16/16 Chromium desktop/390px journeys passed**, with both locales and no uncaught page errors. **5/5 Node contracts pass on Node22 and24**. Node24 production build generates143pages; types and lint pass with existing project warnings. A first dev exploratory run was discarded because cold compilation and the framework route-announcer affected fixture timing/locators. The first production run correctly exposed focus-return behavior; that three-file production defect was fixed, independently source-reviewed and all16journeys rerun successfully. The frozen old-source comparison is recorded separately; it is not counted as candidate validation.
+Validation of the auth-domain production artifact before integration: **16/16 Chromium desktop/390px journeys passed**, with both locales and no uncaught page errors. **5/5 Node contracts pass on Node22 and24**. Node24 production build generates143pages; types and lint pass with existing project warnings. A first dev exploratory run was discarded because cold compilation and the framework route-announcer affected fixture timing/locators. The first production run correctly exposed focus-return behavior; that three-file production defect was fixed, independently source-reviewed and all16journeys rerun successfully. The frozen old-source comparison is recorded separately; it is not counted as candidate validation.
 
 Reproduction from `apps/web` (pnpm10.28.2):
 
@@ -82,3 +81,13 @@ pnpm exec playwright test --config playwright.auth-onboarding.config.ts
 ```
 
 Use Playwright's installed browser, or set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH. PG_AUTH_DEV=1 is an optional development runner, not a substitute for final production validation. A local prior artifact may be compared with MVP_AUTH_BASELINE=1 and MVP_AUTH_BASELINE_ROOT; production feature defaults are unchanged. Evidence: `/workspace/scratch/round6-auth-browser-verified.log`, `round6-auth-build-final.log`, `round6-auth-unit-final.log`, `round6-auth-unit-node22.log`, and the independent foundation review. The test harness uses explicit fake API responses and proves UI behavior, not real email/CAPTCHA-provider availability or a completed login against a live account.
+
+
+Final integration adds a positive HTTP first-paint regression for all six
+localized setup documents. It parses an inert document and requires the actual
+heading, current progress and controls inside main before scripts execute. The
+new locale-wide loading boundary was withdrawn after integration exposed a
+shared hydration issue; static setup now renders directly, while local busy
+states and the shared error boundary remain. See [SSR and hydration](hydration-recovery.md)
+for the scoped repair and the distinction between domain, diagnostic and final
+acceptance evidence. The complete auth suite now has18 checks.
