@@ -84,6 +84,14 @@ export function DataSourceTable({ initialSources, initialAvailability = {}, loca
   const retained = hasSuccess && catalog.length > 0 && readState !== "ready" && readState !== "empty" && readState !== "unauthorized";
   const blocked = readState !== "ready" || Boolean(busy);
   const replace = (source: DataSourceRow) => setCatalog(rows => rows.map(row => row.id === source.id ? source : row));
+  const revokeDeniedAccess = (reason: unknown) => {
+    const status = (reason as { status?: unknown } | null)?.status;
+    if (status !== 401 && status !== 403) return false;
+    setAvailability({ unavailable: true, http_status: status });
+    setReadState("unauthorized");
+    setCatalog([]); setHasSuccess(false); setPreviewId(""); setPreview(null); setError("");
+    return true;
+  };
   const act = async (id: string, action: "sync" | "toggle" | "check") => {
     if (readState !== "ready" || reading.current || acting.current) return;
     const scope = lifecycle.current;
@@ -99,8 +107,8 @@ export function DataSourceTable({ initialSources, initialAvailability = {}, loca
         const result = action === "toggle" ? await controlDataSource(id, !source.enabled) : await checkDataSource(id);
         if (current()) replace(result.source);
       }
-    } catch {
-      if (current()) setError(zh ? "操作结果未能确认。请刷新来源状态后再试。" : "The operation could not be confirmed. Refresh source status before trying again.");
+    } catch (reason) {
+      if (current() && !revokeDeniedAccess(reason)) setError(zh ? "操作结果未能确认。请刷新来源状态后再试。" : "The operation could not be confirmed. Refresh source status before trying again.");
     } finally { if (current()) { acting.current = false; setBusy(""); } }
   };
   const inspect = async (id: string) => {
@@ -112,7 +120,7 @@ export function DataSourceTable({ initialSources, initialAvailability = {}, loca
     try {
       const result = await getDataSourcePreview(id);
       if (current()) { setPreview(result); setPreviewId(id); }
-    } catch { if (current()) setError(zh ? "暂时无法读取预览，请稍后重试。" : "Preview could not be loaded. Please try again."); }
+    } catch (reason) { if (current() && !revokeDeniedAccess(reason)) setError(zh ? "暂时无法读取预览，请稍后重试。" : "Preview could not be loaded. Please try again."); }
     finally { if (current()) { acting.current = false; setBusy(""); } }
   };
 

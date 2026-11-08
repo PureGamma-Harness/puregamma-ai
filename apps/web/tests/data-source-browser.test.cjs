@@ -27,8 +27,14 @@ before(async () => {
       if(!response.ok)return {mockMode:false,sources:[],unavailable:true,http_status:response.status,error_code:'HTTP_'+response.status};
       return response.json();
     }
+    export async function getDataSourcePreview(id:string){
+      const read=++window.dsProbe.previewReads;
+      const response=await fetch('/preview?session='+encodeURIComponent(window.dsProbe.session)+'&read='+read+'&source='+encodeURIComponent(id));
+      if(!response.ok)throw Object.assign(new Error('Preview request failed'),{status:response.status});
+      return response.json();
+    }
     const forbidden=()=>{window.dsProbe.mutations++;return Promise.reject(new Error('No provider mutations in this fixture'));};
-    export const checkDataSource=forbidden,controlDataSource=forbidden,getDataSourcePreview=forbidden,syncDataSource=forbidden;
+    export const checkDataSource=forbidden,controlDataSource=forbidden,syncDataSource=forbidden;
   `);
   const icons = path.join(directory, 'icons.tsx');
   await writeFile(icons, `import React from 'react';const Icon=(props:any)=><svg width="16" height="16" aria-hidden="true"/>;export const Eye=Icon,KeyRound=Icon,Loader2=Icon,Pause=Icon,Play=Icon,RefreshCw=Icon,Settings2=Icon;`);
@@ -38,7 +44,7 @@ before(async () => {
   await writeFile(entry, `
     import React,{useEffect,useState} from 'react';import {createRoot} from 'react-dom/client';
     import {DataSourceTable} from ${JSON.stringify(process.env.DATA_SOURCE_COMPONENT_SOURCE || path.resolve(__dirname, '../components/data-source-table.tsx'))};
-    window.dsProbe={session:new URLSearchParams(location.search).get('session'),reads:0,mutations:0,ready:false};
+    window.dsProbe={session:new URLSearchParams(location.search).get('session'),reads:0,previewReads:0,mutations:0,ready:false};
     function Probe(){const[scenario,replace]=useState(window.dsScenario);const[shown,show]=useState(true);window.dsProbe.replace=replace;window.dsProbe.show=show;useEffect(()=>{window.dsProbe.ready=true},[]);return shown?<DataSourceTable initialSources={scenario.sources} initialAvailability={scenario.metadata} locale={scenario.locale}/>:<p>View removed</p>}
     createRoot(document.getElementById('root')).render(<React.StrictMode><Probe/></React.StrictMode>);
   `);
@@ -57,8 +63,8 @@ before(async () => {
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     response.setHeader('Cache-Control', 'no-store');
-    if (url.pathname === '/catalog') {
-      const key = url.searchParams.get('session') + ':' + url.searchParams.get('read');
+    if (url.pathname === '/catalog' || url.pathname === '/preview') {
+      const key = url.searchParams.get('session') + ':' + (url.pathname === '/preview' ? 'preview:' : '') + url.searchParams.get('read');
       requests.push({ key, method: request.method, path: url.pathname });
       pending.set(key, response); response.once('close', () => pending.delete(key)); return;
     }
@@ -88,8 +94,8 @@ async function pageFor(scenario, run) {
     if (new URL(route.request().url()).origin !== origin) { outside.push(route.request().url()); return route.abort(); }
     return route.continue();
   });
-  async function settle(read, body, status = 200) {
-    const key = `${session}:${read}`;
+  async function settleResponse(kind, read, body, status = 200) {
+    const key = `${session}:${kind === 'preview' ? 'preview:' : ''}${read}`;
     await expect.poll(() => pending.has(key)).toBeTruthy();
     const response = pending.get(key);
     response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body));
@@ -101,7 +107,7 @@ async function pageFor(scenario, run) {
   try {
     await page.goto(`${origin}/?session=${session}`);
     await page.waitForFunction(() => window.dsProbe?.ready);
-    await run(page, { settle, disconnect });
+    await run(page, { settle: (read, body, status) => settleResponse('catalog', read, body, status), settlePreview: (read, body, status) => settleResponse('preview', read, body, status), disconnect });
     assert.equal(await page.evaluate(() => window.dsProbe.mutations), 0);
     assert.deepEqual(errors, []); assert.deepEqual(outside, []);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -225,5 +231,25 @@ test('a permission denial clears cached rows across pending and failed retries',
     await page.getByRole('button', { name: 'Retry source status', exact: true }).click();
     await settle(3, { mockMode: false, sources: [{ ...row, source: 'New confirmed source' }] });
     await expect(page.getByRole('article', { name: 'New confirmed source' })).toBeVisible();
+  });
+});
+
+test('preview permission loss clears privileged cards across pending and failed catalog retries', async () => {
+  for (const status of [401, 403]) await pageFor({ sources: [row] }, async (page, { settle, settlePreview }) => {
+    await page.getByRole('button', { name: 'Preview data', exact: true }).click();
+    await settlePreview(1, {}, status);
+    await expect(page.getByRole('alert')).toContainText(status === 403 ? 'This account cannot view' : 'Sign in to view');
+    await expect(page.getByRole('article')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Retry source status', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Loading source status');
+    await expect(page.getByRole('article')).toHaveCount(0);
+    await settle(1, {}, 503);
+    await expect(page.getByRole('alert')).toContainText('Source status could not be loaded');
+    await expect(page.getByRole('article')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Retry source status', exact: true }).click();
+    await settle(2, { mockMode: false, sources: [{ ...row, source: 'New authorized source' }] });
+    await expect(page.getByRole('article', { name: 'New authorized source' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
   });
 });
