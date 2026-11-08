@@ -21,44 +21,47 @@ export type CapabilityState =
 
 type LoadResult = unknown | { enabled?: boolean };
 
-function stateFromError(reason: unknown): CapabilityState {
-  const status = (reason as Error & { status?: number }).status ?? 0;
+export function capabilityStateFromError(reason: unknown): CapabilityState {
+  const raw = String((reason as Error)?.message || reason);
+  if (/CAPABILITY_(DISABLED|NOT_IMPLEMENTED|PARTIAL)|HARNESS_DISABLED|MEMORY_DISABLED/.test(raw)) {
+    return { status: "unavailable", reason: "feature_disabled" };
+  }
+  const status = (reason as Error & { status?: number })?.status ?? 0;
   if (status === 401 || status === 403) return { status: "unauthorized" };
   if (status === 404 || status === 501) return { status: "unavailable", reason: "not_implemented" };
   if (status >= 500) return { status: "error", message: "HTTP " + status };
   return { status: "error", message: (reason as Error)?.message || "Network error" };
 }
 
-export function useCapabilityGate(
-  load: () => Promise<LoadResult>,
+export function useCapabilityGate<T = LoadResult>(
+  load: () => Promise<T>,
   deps: DependencyList = []
-): { state: CapabilityState; retry: () => void } {
+): { state: CapabilityState; retry: () => void; value: T | undefined } {
   const [state, setState] = useState<CapabilityState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const activeRef = useRef(true);
+  const [value, setValue] = useState<T | undefined>(undefined);
+  const activeRef = useRef(false);
+  const generationRef = useRef(0);
 
   const run = useCallback(() => {
     setState({ status: "loading" });
-    const active = activeRef.current;
-    load()
+    setValue(undefined);
+    const generation = ++generationRef.current;
+    const isCurrent = () => activeRef.current && generation === generationRef.current;
+    Promise.resolve().then(load)
       .then((payload) => {
-        if (!active) return;
+        if (!isCurrent()) return;
         const enabled = (payload as { enabled?: boolean })?.enabled;
         if (enabled === false) {
           setState({ status: "unavailable", reason: "feature_disabled" });
           return;
         }
+        setValue(() => payload);
         setState({ status: "available" });
       })
       .catch((reason) => {
-        if (!active) return;
-        const raw = String((reason as Error)?.message || reason);
-        // Backend CAPABILITY_* codes travel in JSON detail; treat as disabled, not a crash.
-        if (/CAPABILITY_(DISABLED|NOT_IMPLEMENTED|PARTIAL)/.test(raw)) {
-          setState({ status: "unavailable", reason: "feature_disabled" });
-          return;
-        }
-        setState(stateFromError(reason));
+        if (!isCurrent()) return;
+        setState(capabilityStateFromError(reason));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
@@ -68,10 +71,11 @@ export function useCapabilityGate(
     run();
     return () => {
       activeRef.current = false;
+      generationRef.current += 1;
     };
   }, [run, attempt]);
 
-  return { state, retry: () => setAttempt((value) => value + 1) };
+  return { state, value, retry: () => setAttempt((attempt) => attempt + 1) };
 }
 
 export function CapabilityGate({ state, locale, title, onRetry, children }: {
@@ -84,8 +88,8 @@ export function CapabilityGate({ state, locale, title, onRetry, children }: {
   const zh = locale === "zh";
   if (state.status === "loading") {
     return (
-      <div className="grid min-h-40 place-items-center border border-border-pg bg-bg-panel p-6 text-sm text-text-pg-muted">
-        <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+      <div role="status" aria-label={zh ? "正在加载" : "Loading"} className="grid min-h-40 place-items-center rounded-xl border border-border-pg bg-bg-panel p-6 text-sm text-text-pg-muted">
+        <RefreshCw className="h-4 w-4 animate-spin" aria-hidden /><span className="sr-only">{zh ? "正在加载" : "Loading"}</span>
       </div>
     );
   }

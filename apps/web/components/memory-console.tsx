@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrainCircuit, CheckCircle2, Clock3, Download, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { CapabilityGate, useCapabilityGate } from "@/components/ocean/capability-gate";
 import { StatusBadge } from "@/components/ocean/status-badge";
@@ -20,7 +20,8 @@ const SCOPES: { key: ScopeKey; en: string; zh: string; description: { en: string
 function latestItemTime(items: MemoryItem[], scope: string, locale: string): string | null {
   const matching = items.filter((item) => item.scope === scope && item.created_at);
   if (!matching.length) return null;
-  return new Date(Math.max(...matching.map((item) => new Date(item.created_at).getTime()))).toLocaleString(locale);
+  const timestamps = matching.map(item => new Date(item.created_at).getTime()).filter(Number.isFinite);
+  return timestamps.length ? new Date(Math.max(...timestamps)).toLocaleString(locale) : locale === "zh" ? "时间未核实" : "Time unverified";
 }
 
 /**
@@ -31,10 +32,13 @@ function latestItemTime(items: MemoryItem[], scope: string, locale: string): str
 export function MemoryConsole({ locale }: { locale: Locale }) {
   const zh = locale === "zh";
   const gate = useCapabilityGate(() => getMemorySettings(), []);
-  const [settings, setSettings] = useState<MemorySettings | null>(null);
+  const [savedSettings, setSettings] = useState<MemorySettings | null>(null);
+  const settings = savedSettings ?? gate.value?.settings ?? null;
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [proposals, setProposals] = useState<MemoryProposal[]>([]);
   const [busy, setBusy] = useState("");
+  const [reading, setReading] = useState(true);
+  const [readErrors, setReadErrors] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [consentPrompt, setConsentPrompt] = useState<ScopeKey | null>(null);
@@ -42,15 +46,32 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
   const [confirmClear, setConfirmClear] = useState<"all" | "short_term" | "mid_term" | null>(null);
   const [exportUrl, setExportUrl] = useState<{ url: string; expires_at: string } | null>(null);
 
+  const mounted = useRef(false);
+  const snapshotVersion = useRef(0);
+  const readingRef = useRef(false);
+  const actionRef = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; snapshotVersion.current += 1; readingRef.current = false; };
+  }, []);
+
   const refresh = useCallback(async () => {
+    if (readingRef.current) return;
+    readingRef.current = true;
+    const version = ++snapshotVersion.current;
+    setReading(true);
     const [settingsResult, itemsResult, proposalsResult] = await Promise.allSettled([
       getMemorySettings(),
       Promise.all([getMemoryItems("short_term"), getMemoryItems("mid_term")]).then(([shortTerm, midTerm]) => [...(shortTerm.items || []), ...(midTerm.items || [])]),
       getMemoryProposals(),
     ]);
+    if (!mounted.current || version !== snapshotVersion.current) return;
     if (settingsResult.status === "fulfilled") setSettings(settingsResult.value.settings);
     if (itemsResult.status === "fulfilled") setItems(itemsResult.value);
     if (proposalsResult.status === "fulfilled") setProposals(proposalsResult.value.proposals || []);
+    setReadErrors([...(settingsResult.status === "rejected" ? ["settings"] : []), ...(itemsResult.status === "rejected" ? ["items"] : []), ...(proposalsResult.status === "rejected" ? ["proposals"] : [])]);
+    readingRef.current = false;
+    setReading(false);
   }, []);
 
   useEffect(() => {
@@ -58,28 +79,41 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
     refresh().catch(() => undefined);
   }, [gate.state.status, refresh]);
 
-  const toggleScope = async (key: ScopeKey, nextValue: boolean) => {
-    if (!settings) return;
+  const beginAction = (key: string) => {
+    if (actionRef.current || readingRef.current) return false;
+    actionRef.current = true;
+    snapshotVersion.current += 1;
     setBusy(key);
     setError("");
     setNotice("");
+    return true;
+  };
+
+  const toggleScope = async (key: ScopeKey, nextValue: boolean) => {
+    if (!settings) return;
+    if (!beginAction(key)) return;
     try {
       const patch: Partial<MemorySettings> = { [`${key}_enabled`]: nextValue } as Partial<MemorySettings>;
       const updated = await updateMemorySettings(patch, false);
       setSettings(updated.settings);
-      setNotice(nextValue ? (zh ? `已开启「${SCOPES.find((item) => item.key === key)?.zh}」。` : `Enabled "${SCOPES.find((item) => item.key === key)?.en}".`) : (zh ? "已关闭。该 scope 不再参与上下文注入。" : "Disabled. This scope is no longer injected into context."));
+      if (updated.settings[`${key}_enabled` as keyof MemorySettings] !== nextValue) {
+        setError(zh ? "未能应用所选设置，请检查当前状态后重试。" : "The requested setting was not applied. Check its current state before retrying.");
+        return;
+      }
+      setNotice(nextValue ? (zh ? `已开启「${SCOPES.find((item) => item.key === key)?.zh}」。` : `Enabled "${SCOPES.find((item) => item.key === key)?.en}".`) : (zh ? "已关闭，此类记忆不再用于回答。" : "Disabled. This memory type is no longer used in answers."));
     } catch (reason) {
       const raw = String((reason as Error)?.message || reason);
       if (/CONSENT_REQUIRED/.test(raw)) setConsentPrompt(key);
-      else setError(raw);
+      else setError(zh ? "无法更新记忆设置，请稍后重试。" : "Memory settings could not be updated. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const grantConsent = async () => {
     if (!consentPrompt || !settings) return;
-    setBusy(`consent:${consentPrompt}`);
+    if (!beginAction(`consent:${consentPrompt}`)) return;
     setError("");
     try {
       const patch = { [`${consentPrompt}_enabled`]: true } as Partial<MemorySettings>;
@@ -88,14 +122,15 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
       setConsentPrompt(null);
       setNotice(zh ? "已同意。之后 Agent 只会写入你批准的记忆条目。" : "Consent granted. The Agent will only write memory items you approve.");
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const approve = async (proposal: MemoryProposal) => {
-    setBusy(`proposal:${proposal.id}`);
+    if (!beginAction(`proposal:${proposal.id}`)) return;
     setError("");
     try {
       await decideMemoryProposal(proposal.id, "approve");
@@ -103,28 +138,30 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
       await refresh();
       setNotice(zh ? "已写入记忆。" : "Memory item saved.");
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const reject = async (proposal: MemoryProposal) => {
-    setBusy(`proposal:${proposal.id}`);
+    if (!beginAction(`proposal:${proposal.id}`)) return;
     setError("");
     try {
       await decideMemoryProposal(proposal.id, "reject");
       setProposals((current) => current.filter((item) => item.id !== proposal.id));
       setNotice(zh ? "已拒绝该记忆提议。" : "Proposal rejected.");
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const removeItem = async (item: MemoryItem) => {
-    setBusy(`delete:${item.id}`);
+    if (!beginAction(`delete:${item.id}`)) return;
     setError("");
     try {
       await deleteMemoryItem(item.id);
@@ -132,14 +169,15 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
       setConfirmDelete(null);
       setNotice(zh ? "已删除该记忆条目。" : "Memory item deleted.");
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const clear = async (scope: "all" | "short_term" | "mid_term") => {
-    setBusy("clear");
+    if (!beginAction("clear")) return;
     setError("");
     try {
       const result = await clearMemory(scope);
@@ -147,21 +185,23 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
       setNotice(zh ? `已清空 ${result.cleared} 条记忆。` : `Cleared ${result.cleared} memory item(s).`);
       await refresh();
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
 
   const exportAll = async () => {
-    setBusy("export");
+    if (!beginAction("export")) return;
     setError("");
     try {
       setExportUrl(await exportMemory());
       setNotice(zh ? "导出链接已生成（有时效）。" : "Export link generated (expires).");
     } catch (reason) {
-      setError(String((reason as Error)?.message || reason));
+      setError(zh ? "无法完成此记忆操作，请稍后重试。" : "This memory action could not be completed. Please try again.");
     } finally {
+      actionRef.current = false;
       setBusy("");
     }
   };
@@ -179,8 +219,8 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
         <h1 className="mt-3 text-2xl font-semibold leading-tight md:text-3xl">{zh ? "Agent 记忆" : "Agent memory"}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-text-pg-muted">
           {zh
-            ? "记忆是信任功能：每个 scope 可独立开关；Agent 提议的记忆必须经你同意才会写入；关闭的 scope 不会参与上下文注入。"
-            : "Memory is a trust feature: every scope has its own switch; the Agent only writes memories you approve; disabled scopes are never injected into context."}
+            ? "记忆是信任功能：每类记忆可独立开关；Agent 提议的记忆必须经你同意才会写入；关闭后不会再用于回答。"
+            : "Choose what the Agent can remember. Review suggestions before saving, and turn off or delete memories at any time."}
         </p>
       </header>
 
@@ -188,11 +228,13 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
         {notice ? <div className="mb-4 border border-status-positive p-3 text-sm text-status-positive rounded-lg" role="status">{notice}</div> : null}
         {error ? <div className="mb-4 border border-status-negative p-3 text-sm text-status-negative rounded-lg" role="alert">{error}</div> : null}
 
+        {readErrors.length ? <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-status-warning/40 p-3 text-sm text-status-warning"><span>{zh ? "部分记忆数据无法加载，正在显示上次确认的内容。请重试以获取更新。" : "Some memory data could not be loaded. Showing the last confirmed content; retry to refresh."}</span><button type="button" disabled={reading || !!busy} onClick={() => { if (!actionRef.current) void refresh(); }} className="min-h-10 underline underline-offset-4">{zh ? "重试加载记忆" : "Retry loading memory"}</button></div> : null}
+        {reading ? <p role="status" className="mb-4 text-sm text-text-pg-muted">{zh ? "正在加载记忆与提议…" : "Loading memory and proposals…"}</p> : null}
         {settings ? (
           <>
             <section className="border border-border-pg bg-bg-panel">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-pg p-4">
-                <h2 className="font-semibold">{zh ? "Scope 开关" : "Memory scopes"}</h2>
+                <h2 className="font-semibold">{zh ? "记忆开关" : "Memory scopes"}</h2>
                 <span className="text-xs text-text-pg-dim">{zh ? "保留期" : "Retention"}: {settings.retention_days} {zh ? "天" : "days"}</span>
               </div>
               <div className="divide-y divide-border-pg">
@@ -204,21 +246,22 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-text-pg">{zh ? scope.zh : scope.en}</p>
-                          <StatusBadge domain="data" value={enabled ? "fresh" : "stale"} locale={locale} className={enabled ? "" : "opacity-80"} />
+                          <span className={`rounded-full border px-2 py-0.5 text-xs ${enabled ? "border-status-positive/30 text-status-positive" : "border-border-pg text-text-pg-muted"}`}>{enabled ? (zh ? "开启" : "On") : (zh ? "关闭" : "Off")}</span>
                         </div>
                         <p className="mt-1 text-xs leading-5 text-text-pg-muted">{zh ? scope.description.zh : scope.description.en}</p>
                         <p className="mt-1 text-[11px] text-text-pg-dim">
                           {enabled
-                            ? zh ? "已开启：经你批准的内容可参与上下文注入。" : "Enabled: approved content may be injected into context."
-                            : zh ? "已关闭：该 scope 不会出现在上下文注入结果里。" : "Disabled: this scope is excluded from context injection."}
-                          {latest ? <> · {zh ? "最后更新" : "Last updated"} {latest}</> : <> · {zh ? "暂无条目" : "no items"}</>}
+                            ? zh ? "已开启：经你批准的记忆可帮助个性化后续回答。" : "On: approved memories can personalize future answers."
+                            : zh ? "已关闭：此类记忆不再用于回答。" : "Off: this memory type will not be used in answers."}
+                          {latest ? <> · {zh ? "最后更新" : "Last updated"} {latest}</> : <> · {scope.key !== "short_term" && scope.key !== "mid_term" ? (zh ? "条目不在此列表中展示" : "items are not listed here") : reading ? (zh ? "正在加载条目" : "loading items") : readErrors.includes("items") ? (zh ? "条目未加载" : "items not loaded") : (zh ? "暂无条目" : "no items")}</>}
                         </p>
                       </div>
                       <button
                         type="button"
                         role="switch"
                         aria-checked={enabled}
-                        disabled={busy.startsWith(scope.key) || busy.startsWith("consent")}
+                        aria-label={zh ? scope.zh : scope.en}
+                        disabled={!!busy || reading || (readErrors.includes("settings") && !enabled)}
                         onClick={() => void toggleScope(scope.key, !enabled)}
                         className={`h-8 w-14 border p-1 disabled:opacity-50 rounded-lg ${enabled ? "border-border-pg-strong" : "border-border-pg"}`}
                       >
@@ -231,19 +274,19 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
             </section>
 
             {consentPrompt ? (
-              <div role="dialog" aria-modal="true" aria-label={zh ? "记忆授权" : "Memory consent"} className="mt-4 border border-status-warning bg-bg-panel p-4">
+              <div role="group" aria-label={zh ? "记忆授权" : "Memory consent"} className="mt-4 border border-status-warning bg-bg-panel p-4">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" aria-hidden />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">{zh ? "开启记忆需要你的同意" : "Consent required to enable memory"}</p>
                     <p className="mt-1 text-xs leading-5 text-text-pg-muted">
                       {zh
-                        ? `开启「${SCOPES.find((item) => item.key === consentPrompt)?.zh}」后，Agent 可以提议写入该 scope 的记忆条目，但每条都必须经你批准才会生效。你可以随时关闭或删除。`
-                        : `Enabling "${SCOPES.find((item) => item.key === consentPrompt)?.en}" lets the Agent propose memory items in this scope; nothing is saved until you approve each proposal. You can disable or delete at any time.`}
+                        ? `开启「${SCOPES.find((item) => item.key === consentPrompt)?.zh}」后，Agent 可以提议写入此类记忆条目，但每条都必须经你批准才会生效。你可以随时关闭或删除。`
+                        : `Enabling "${SCOPES.find((item) => item.key === consentPrompt)?.en}" lets the Agent propose memory items of this type; nothing is saved until you approve each proposal. You can disable or delete at any time.`}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => void grantConsent()} disabled={busy.startsWith("consent")} className="inline-flex items-center gap-1.5 border border-border-pg-strong px-3 py-2 text-xs font-medium disabled:opacity-40 rounded-lg"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{zh ? "同意并开启" : "Agree and enable"}</button>
-                      <button type="button" onClick={() => setConsentPrompt(null)} className="border border-border-pg px-3 py-2 text-xs rounded-lg">{zh ? "暂不开启" : "Not now"}</button>
+                      <button type="button" onClick={() => void grantConsent()} disabled={!!busy || reading || readErrors.includes("settings")} className="inline-flex items-center gap-1.5 border border-border-pg-strong px-3 py-2 text-xs font-medium disabled:opacity-40 rounded-lg"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{zh ? "同意并开启" : "Agree and enable"}</button>
+                      <button type="button" onClick={() => setConsentPrompt(null)} disabled={!!busy} className="border border-border-pg px-3 py-2 text-xs rounded-lg">{zh ? "暂不开启" : "Not now"}</button>
                     </div>
                   </div>
                 </div>
@@ -253,10 +296,10 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
             <section className="mt-4 border border-border-pg bg-bg-panel">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-pg p-4">
                 <h2 className="flex items-center gap-2 font-semibold"><Clock3 className="h-4 w-4" aria-hidden />{zh ? "待批准的记忆提议" : "Pending memory proposals"}</h2>
-                <span className="text-xs text-text-pg-dim">{proposals.length} {zh ? "条待处理" : "pending"}</span>
+                <span className="text-xs text-text-pg-dim">{reading || readErrors.includes("proposals") ? "—" : proposals.length} {zh ? "条待处理" : "pending"}</span>
               </div>
               {proposals.length === 0 ? (
-                <p className="p-4 text-sm text-text-pg-muted">{zh ? "暂无待批准的提议。" : "No proposals awaiting approval."}</p>
+                <p className="p-4 text-sm text-text-pg-muted">{reading ? (zh ? "正在加载提议…" : "Loading proposals…") : readErrors.includes("proposals") ? (zh ? "提议尚未加载，请重试。" : "Proposals have not loaded. Please retry.") : (zh ? "暂无待批准的提议。" : "No proposals awaiting approval.")}</p>
               ) : (
                 <ul className="divide-y divide-border-pg">
                   {proposals.map((proposal) => (
@@ -271,8 +314,8 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
                         <p className="mt-1 text-[11px] text-text-pg-dim">{zh ? "来源" : "Source"}: {proposal.source}</p>
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        <button type="button" onClick={() => void approve(proposal)} disabled={busy === `proposal:${proposal.id}`} className="inline-flex items-center gap-1 border border-border-pg-strong px-2.5 py-1.5 text-xs font-medium disabled:opacity-40 rounded-lg"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{zh ? "批准写入" : "Approve"}</button>
-                        <button type="button" onClick={() => void reject(proposal)} disabled={busy === `proposal:${proposal.id}`} className="inline-flex items-center gap-1 border border-border-pg px-2.5 py-1.5 text-xs disabled:opacity-40 rounded-lg"><XCircle className="h-3.5 w-3.5" aria-hidden />{zh ? "拒绝" : "Reject"}</button>
+                        <button type="button" onClick={() => void approve(proposal)} disabled={!!busy || reading || readErrors.includes("proposals")} className="inline-flex items-center gap-1 border border-border-pg-strong px-2.5 py-1.5 text-xs font-medium disabled:opacity-40 rounded-lg"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />{zh ? "批准写入" : "Approve"}</button>
+                        <button type="button" onClick={() => void reject(proposal)} disabled={!!busy || reading} className="inline-flex items-center gap-1 border border-border-pg px-2.5 py-1.5 text-xs disabled:opacity-40 rounded-lg"><XCircle className="h-3.5 w-3.5" aria-hidden />{zh ? "拒绝" : "Reject"}</button>
                       </div>
                     </li>
                   ))}
@@ -285,7 +328,7 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
                 <h2 className="font-semibold">{zh ? "已保存的记忆条目" : "Saved memory items"}</h2>
               </div>
               {items.length === 0 ? (
-                <p className="p-4 text-sm text-text-pg-muted">{zh ? "暂无已保存的记忆条目。" : "No saved memory items."}</p>
+                <p className="p-4 text-sm text-text-pg-muted">{reading ? (zh ? "正在加载条目…" : "Loading saved items…") : readErrors.includes("items") ? (zh ? "记忆条目尚未加载，请重试。" : "Saved items have not loaded. Please retry.") : (zh ? "暂无已保存的记忆条目。" : "No saved memory items.")}</p>
               ) : (
                 <ul className="divide-y divide-border-pg">
                   {items.map((item) => (
@@ -300,11 +343,11 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
                       </div>
                       {confirmDelete === item.id ? (
                         <div className="flex shrink-0 gap-2">
-                          <button type="button" onClick={() => void removeItem(item)} disabled={busy === `delete:${item.id}`} className="border border-status-negative px-2.5 py-1.5 text-xs font-medium text-status-negative disabled:opacity-40 rounded-lg">{zh ? "确认删除" : "Confirm delete"}</button>
-                          <button type="button" onClick={() => setConfirmDelete(null)} className="border border-border-pg px-2.5 py-1.5 text-xs rounded-lg">{zh ? "取消" : "Cancel"}</button>
+                          <button type="button" onClick={() => void removeItem(item)} disabled={!!busy || reading} className="border border-status-negative px-2.5 py-1.5 text-xs font-medium text-status-negative disabled:opacity-40 rounded-lg">{zh ? "确认删除" : "Confirm delete"}</button>
+                          <button type="button" onClick={() => setConfirmDelete(null)} disabled={!!busy} className="border border-border-pg px-2.5 py-1.5 text-xs rounded-lg">{zh ? "取消" : "Cancel"}</button>
                         </div>
                       ) : (
-                        <button type="button" onClick={() => setConfirmDelete(item.id)} className="inline-flex shrink-0 items-center gap-1 border border-border-pg px-2.5 py-1.5 text-xs text-text-pg-muted hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "删除" : "Delete"}</button>
+                        <button type="button" onClick={() => setConfirmDelete(item.id)} disabled={!!busy || reading} className="inline-flex shrink-0 items-center gap-1 border border-border-pg px-2.5 py-1.5 text-xs text-text-pg-muted hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "删除" : "Delete"}</button>
                       )}
                     </li>
                   ))}
@@ -315,16 +358,16 @@ export function MemoryConsole({ locale }: { locale: Locale }) {
             <section className="mt-4 flex flex-wrap gap-2 border border-border-pg bg-bg-panel p-4">
               {confirmClear ? (
                 <>
-                  <p className="w-full text-xs text-status-warning">{zh ? "清空操作不可撤销。确认清空所选范围的记忆？" : "Clearing is irreversible. Confirm clearing the selected memory scope?"}</p>
-                  <button type="button" onClick={() => void clear(confirmClear)} disabled={busy === "clear"} className="border border-status-negative px-3 py-2 text-xs font-medium text-status-negative disabled:opacity-40 rounded-lg">{zh ? "确认清空" : "Confirm clear"}</button>
-                  <button type="button" onClick={() => setConfirmClear(null)} className="border border-border-pg px-3 py-2 text-xs rounded-lg">{zh ? "取消" : "Cancel"}</button>
+                  <p className="w-full text-xs text-status-warning">{zh ? "清空操作不可撤销。确认清空所选范围的记忆？" : "Clearing is irreversible. Confirm clearing the selected memories?"}</p>
+                  <button type="button" onClick={() => void clear(confirmClear)} disabled={!!busy || reading} className="border border-status-negative px-3 py-2 text-xs font-medium text-status-negative disabled:opacity-40 rounded-lg">{zh ? "确认清空" : "Confirm clear"}</button>
+                  <button type="button" onClick={() => setConfirmClear(null)} disabled={!!busy} className="border border-border-pg px-3 py-2 text-xs rounded-lg">{zh ? "取消" : "Cancel"}</button>
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setConfirmClear("all")} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空全部记忆" : "Clear all memory"}</button>
-                  <button type="button" onClick={() => setConfirmClear("short_term")} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空短期记忆" : "Clear short-term"}</button>
-                  <button type="button" onClick={() => setConfirmClear("mid_term")} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空中期记忆" : "Clear mid-term"}</button>
-                  <button type="button" onClick={() => void exportAll()} disabled={busy === "export"} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs disabled:opacity-40 rounded-lg"><Download className="h-3.5 w-3.5" aria-hidden />{zh ? "导出记忆" : "Export memory"}</button>
+                  <button type="button" onClick={() => setConfirmClear("all")} disabled={!!busy || reading} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空全部记忆" : "Clear all memory"}</button>
+                  <button type="button" onClick={() => setConfirmClear("short_term")} disabled={!!busy || reading} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空短期记忆" : "Clear short-term"}</button>
+                  <button type="button" onClick={() => setConfirmClear("mid_term")} disabled={!!busy || reading} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs hover:border-status-negative hover:text-status-negative rounded-lg"><Trash2 className="h-3.5 w-3.5" aria-hidden />{zh ? "清空中期记忆" : "Clear mid-term"}</button>
+                  <button type="button" onClick={() => void exportAll()} disabled={!!busy || reading} className="inline-flex items-center gap-1.5 border border-border-pg px-3 py-2 text-xs disabled:opacity-40 rounded-lg"><Download className="h-3.5 w-3.5" aria-hidden />{zh ? "导出记忆" : "Export memory"}</button>
                 </>
               )}
             </section>

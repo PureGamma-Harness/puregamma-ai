@@ -6,7 +6,7 @@ import { type Locale, withLocale } from "@/i18n/routing";
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }) {
   const params = await paramsPromise;
   const locale = params.locale === "zh" ? "zh" : "en";
-  return { title: locale === "zh" ? "支付成功 | PureGamma AI" : "Payment Successful | PureGamma AI", description: locale === "zh" ? "订阅与充值支付成功确认。" : "Subscription and top-up payment confirmation." };
+  return { title: locale === "zh" ? "确认付款状态 | PureGamma AI" : "Check Payment Status | PureGamma AI", description: locale === "zh" ? "返回账单页查看付款、订阅与充值状态。" : "Review payment, subscription and top-up status in billing." };
 }
 
 export default async function BillingSuccessPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
@@ -14,9 +14,9 @@ export default async function BillingSuccessPage({ params: paramsPromise }: { pa
   const zh = params.locale === "zh";
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="STRIPE CHECKOUT" title={zh ? "付款处理中" : "Payment pending confirmation"} description={zh ? "付款已收到。订阅状态会在 Stripe Webhook 确认后更新。" : "Payment received. Your subscription will update after Stripe webhook confirmation."} />
+      <PageHeader eyebrow={zh ? "账单" : "BILLING"} title={zh ? "付款状态待确认" : "Payment pending confirmation"} description={zh ? "请返回账单页查看已确认的付款状态与当前套餐。" : "Return to billing to review the confirmed payment status and your current plan."} />
       <ResearchCard>
-        <p>{zh ? "PureGamma 不会仅凭 success URL 升级账户；最终套餐、Credits 与权限以 Stripe Webhook 验签后的结果为准。" : "PureGamma does not upgrade an account from the success URL alone; plan, credits, and entitlement update only after signed Stripe webhook confirmation."}</p>
+        <p>{zh ? "如果你已完成付款，套餐与余额更新可能需要片刻。此页面不代表付款已成功，请以账单页中的状态为准。" : "If you completed checkout, plan and balance updates may take a moment. This page does not confirm a successful payment; check billing for the current status."}</p>
         <Link className="mt-4 inline-flex text-sm font-medium underline" href={withLocale(params.locale, "/billing")}>{zh ? "返回订阅页" : "Back to billing"}</Link>
       </ResearchCard>
     </div>

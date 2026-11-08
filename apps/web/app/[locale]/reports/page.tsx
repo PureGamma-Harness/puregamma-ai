@@ -11,10 +11,12 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
   return localizedMetadata(locale, "reports", "/reports");
 }
 
-export default async function ReportsPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+export default async function ReportsPage({ params: paramsPromise, searchParams }: { params: Promise<{ locale: Locale }>; searchParams: Promise<{ report?: string | string[] }> }) {
   const params = await paramsPromise;
   const locale = params.locale;
   const copy = getMessageNamespace(locale, "reports");
   const data = await getReports(locale);
-  return <ReportsConsole locale={locale} reports={data.reports} copy={copy} filters={copy.filters} />;
+  const report = (await searchParams).report;
+  const initialReportId = typeof report === "string" ? report : undefined;
+  return <ReportsConsole locale={locale} reports={data.reports} copy={copy} filters={copy.filters} initialReportId={initialReportId} unavailable={data.unavailable} />;
 }

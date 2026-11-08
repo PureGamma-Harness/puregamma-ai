@@ -1,5 +1,5 @@
-import { redirectToLocalized } from "@/app/legacy-redirect";
+import { redirectToLocalized, type LegacySearchParams } from "@/app/legacy-redirect";
 
-export default async function ApiDocumentationRedirect() {
-  return redirectToLocalized("/api");
+export default async function ApiDocumentationRedirect({ searchParams }: { searchParams: Promise<LegacySearchParams> }) {
+  return redirectToLocalized("/api", await searchParams);
 }

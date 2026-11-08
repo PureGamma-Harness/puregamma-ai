@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - 'apps/web/**'
-      - 'tests/e2e/playwright/next-upgrade-*.ts'
+      - 'tests/e2e/playwright/**'
       - '.github/workflows/web-runtime-security.yml'
   push:
     branches: [main, refactor/harness-core-v2]
     paths:
       - 'apps/web/**'
-      - 'tests/e2e/playwright/next-upgrade-*.ts'
+      - 'tests/e2e/playwright/**'
       - '.github/workflows/web-runtime-security.yml'
 
 permissions:
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   standalone:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: apps/web
@@ -50,6 +50,8 @@ jobs:
       - run: pnpm test:dependency-compat
       - run: pnpm test:runtime-security
       - run: node --test tests/offline-fetch-guard.test.cjs
+      - name: Verify product context and appearance contracts
+        run: node --test tests/appearance-preferences.test.cjs tests/auth-onboarding-compat.test.cjs tests/plotly-chart-data.test.cjs tests/data-source-status.test.cjs tests/legacy-query-preservation.test.cjs tests/route-recovery.test.cjs
       - run: pnpm build
       - name: Verify the standalone runtime's actual image library
         run: |
@@ -65,12 +67,73 @@ jobs:
           mkdir -p .next-build/standalone/.next-build
           cp -R .next-build/static .next-build/standalone/.next-build/static
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify asynchronous capabilities and chart ownership in real React
+        run: node --test --test-concurrency=1 tests/capability-gate.test.cjs tests/plotly-chart-browser.test.cjs tests/data-source-browser.test.cjs
       - run: pnpm test:upgrade-smoke
+      - name: Verify navigation and appearance journeys
+        run: pnpm exec playwright test --config playwright.foundation.config.ts
+      - name: Verify authentication and first-run journeys
+        run: pnpm exec playwright test --config playwright.auth-onboarding.config.ts
+      - name: Verify research and Agent journeys
+        run: pnpm exec playwright test --config playwright.research.config.ts
+      - name: Verify financial and account operation journeys
+        env:
+          PG_OPERATIONS_STANDALONE: '1'
+        run: pnpm exec playwright test --config playwright.operations.config.ts
+      - name: Verify every full-product route and locale
+        env:
+          PG_ROUTE_MODE: full
+        run: pnpm exec playwright test --config playwright.routes.config.ts
       - name: Preserve browser failure traces
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: web-runtime-security-traces
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  launch-routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3215
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: 'false'
+      PG_ROUTE_MODE: launch
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build with the default initial-launch policy
+        run: pnpm build
+      - name: Prepare standalone public and static assets
+        run: |
+          cp -R public .next-build/standalone/public
+          mkdir -p .next-build/standalone/.next-build
+          cp -R .next-build/static .next-build/standalone/.next-build/static
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify default release gates and accessible launch routes
+        run: pnpm exec playwright test --config playwright.routes.config.ts
+      - name: Preserve launch-route failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-launch-route-traces
           path: apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7

@@ -11,13 +11,15 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
   return { title: zh ? "Agent 对话 | PureGamma AI" : "Agent Chat | PureGamma AI", description: zh ? "与研究 Agent 对话：策略、事件、风险与投资笔记。" : "Chat with your research Agent about strategies, events, risk, and notes." };
 }
 
-export default async function ChatPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
+export default async function ChatPage({ params: paramsPromise, searchParams }: { params: Promise<{ locale: Locale }>; searchParams: Promise<{ topic?: string | string[] }> }) {
   const params = await paramsPromise;
+  const topic = (await searchParams).topic;
+  const initialPrompt = typeof topic === "string" ? Array.from(topic.trim()).slice(0, 4000).join("") : "";
   return (
     <ChronoSlices>
       <ChronoSlice>
         <IntelligenceShell compact eyebrow={params.locale === "zh" ? "Reason" : "Reason"} title={params.locale === "zh" ? "与 Agent 共同推理。" : "Reason with your Agent."} byline={params.locale === "zh" ? "围绕策略、事件与风险的持续推理对象。" : "A continuously updating counterpart for strategies, events and risk."}>
-          <AgentChat locale={params.locale} />
+          <AgentChat locale={params.locale} initialPrompt={initialPrompt} />
         </IntelligenceShell>
       </ChronoSlice>
     </ChronoSlices>

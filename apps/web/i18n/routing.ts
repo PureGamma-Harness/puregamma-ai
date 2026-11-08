@@ -7,7 +7,10 @@ export const localeCookieName = "pg_locale";
 export const localePrefixPattern = /^\/(en|zh)(?=\/|$)/;
 
 export const legacyLocaleRoutes = [
+  "/account",
+  "/chat",
   "/dashboard",
+  "/gateway",
   "/news",
   "/reports",
   "/options",
@@ -33,6 +36,7 @@ export const legacyLocaleRoutes = [
   "/verify-email",
   "/forgot-password",
   "/reset-password",
+  "/secretary",
   "/onboarding/assets",
   "/onboarding/style",
   "/onboarding/channels"

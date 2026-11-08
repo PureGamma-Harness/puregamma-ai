@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { getCaptchaPuzzle } from "@/lib/api";
+import { useLocale } from "@/components/i18n/LocaleProvider";
 
 type Puzzle = {
   captcha_id: string;
@@ -36,29 +37,36 @@ export function PuzzleCaptcha({
   retryToken?: number;
 }) {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startX = useRef(0);
   const solvedRef = useRef(false);
   const trackRef = useRef<HTMLDivElement>(null);
+  const generation = useRef(0);
+  const zh = useLocale() === "zh";
 
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setLoading(true);
     setDragX(0);
     solvedRef.current = false;
     try {
-      setPuzzle(await getCaptchaPuzzle());
+      const result = await getCaptchaPuzzle();
+      if (request === generation.current) setPuzzle(result);
     } catch {
-      setPuzzle(null);
+      if (request === generation.current) setPuzzle(null);
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   }, []);
 
+  const invalidateLoad = useCallback(() => { generation.current++; }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    return invalidateLoad;
+  }, [load, invalidateLoad]);
 
   // Server rejected the attempt but kept the puzzle alive: reset the slider and
   // let the user try again without fetching a new challenge.
@@ -72,17 +80,17 @@ export function PuzzleCaptcha({
   const maxDrag = TRACK_WIDTH - PIECE_SIZE - 8;
 
   const finishDrag = useCallback(() => {
-    if (!puzzle || solvedRef.current) return;
+    if (!puzzle || loading || disabled || solvedRef.current) return;
     setDragging(false);
     // Convert track px to SVG coordinates: the piece starts at x=8 in a 320-wide viewBox.
     const offset = Math.round(8 + dragX);
     if (verified) return;
     onSolved({ captchaId: puzzle.captcha_id, offset });
     solvedRef.current = true;
-  }, [dragX, onSolved, puzzle, verified]);
+  }, [dragX, onSolved, puzzle, verified, loading, disabled]);
 
   const onPointerDown = (event: React.PointerEvent) => {
-    if (!puzzle || verified || disabled) return;
+    if (!puzzle || loading || verified || disabled) return;
     setDragging(true);
     startX.current = event.clientX - dragX;
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
@@ -96,13 +104,15 @@ export function PuzzleCaptcha({
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[11px] text-text-pg-dim">
         <span>{labels.instruction}</span>
-        <button type="button" disabled={disabled} onClick={() => { onReset(); void load(); }} className="inline-flex items-center gap-1 text-text-pg-muted transition hover:text-text-pg disabled:cursor-not-allowed disabled:opacity-50" aria-label="refresh captcha">
+        <button type="button" disabled={disabled || loading} onClick={() => { onReset(); void load(); }} className="inline-flex min-h-10 min-w-10 items-center justify-center gap-1 text-text-pg-muted transition hover:text-text-pg disabled:cursor-not-allowed disabled:opacity-50" aria-label={zh ? "刷新验证" : "Refresh verification"}>
           <RefreshCw className="h-3 w-3" />
         </button>
       </div>
       <div ref={trackRef} className="relative select-none overflow-hidden border border-border-pg rounded-xl" style={{ width: TRACK_WIDTH, maxWidth: "100%" }}>
-        {loading || !puzzle ? (
-          <div className="grid h-[120px] place-items-center bg-bg-panel-muted"><Loader2 className="h-5 w-5 animate-spin text-text-pg-dim" /></div>
+        {loading ? (
+          <div role="status" aria-label={zh ? "正在加载验证" : "Loading verification"} className="grid h-[120px] place-items-center bg-bg-panel-muted"><Loader2 className="h-5 w-5 animate-spin text-text-pg-dim" /></div>
+        ) : !puzzle ? (
+          <p role="alert" className="grid min-h-[120px] place-items-center bg-bg-panel-muted p-4 text-center text-sm text-text-pg-muted">{zh ? "验证暂时无法加载。请刷新后重试。" : "Verification could not be loaded. Refresh to try again."}</p>
         ) : (
           <>
             <img src={puzzle.background} width={TRACK_WIDTH} height={puzzle.height} alt="" draggable={false} className="block" />
@@ -120,6 +130,8 @@ export function PuzzleCaptcha({
       </div>
       <div
         role="slider"
+        aria-label={labels.drag}
+        aria-disabled={disabled || loading || !puzzle}
         aria-valuemin={0}
         aria-valuemax={maxDrag}
         aria-valuenow={Math.round(dragX)}
@@ -129,9 +141,9 @@ export function PuzzleCaptcha({
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
         onKeyDown={(event) => {
-          if (verified || !puzzle || disabled) return;
-          if (event.key === "ArrowRight") setDragX((value) => Math.min(maxDrag, value + 8));
-          if (event.key === "ArrowLeft") setDragX((value) => Math.max(0, value - 8));
+          if (verified || !puzzle || loading || disabled) return;
+          if (event.key === "ArrowRight") { event.preventDefault(); setDragX((value) => Math.min(maxDrag, value + 8)); }
+          if (event.key === "ArrowLeft") { event.preventDefault(); setDragX((value) => Math.max(0, value - 8)); }
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             finishDrag();

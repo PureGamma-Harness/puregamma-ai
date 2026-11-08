@@ -1,6 +1,7 @@
 import type { IntegrationRow, PositionRow, SignalRow, StrategyRow } from "@/components/puregamma";
 import { defaultLocale, stripLocale, type Locale } from "@/i18n/routing";
 import { requiresAuthentication } from "@/lib/route-access";
+import { safeReturnTo } from "@/lib/auth-navigation";
 import { t } from "@/lib/translations";
 import { syncUserStateFromPayload } from "@/lib/user-state";
 
@@ -197,7 +198,7 @@ export async function internalAdminLogin(username: string, password: string) {
 
 export async function googleLogin(locale: Locale = defaultLocale) {
   const requested = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("returnTo");
-  const returnTo = requested?.startsWith("/") && !requested.startsWith("//") ? requested : `/${locale}/chat`;
+  const returnTo = safeReturnTo(requested, `/${locale}/chat`);
   const response = await fetch(`${await resolveApiUrl()}/auth/google/authorize?return_to=${encodeURIComponent(returnTo)}`, {
     headers: { "Content-Type": "application/json", "X-PG-Locale": locale },
     credentials: "include",
@@ -238,7 +239,7 @@ export async function googleCallback(code: string, state: string, locale: Locale
 
 export async function xLogin(locale: Locale = defaultLocale) {
   const requested = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("returnTo");
-  const returnTo = requested?.startsWith("/") && !requested.startsWith("//") ? requested : `/${locale}/chat`;
+  const returnTo = safeReturnTo(requested, `/${locale}/chat`);
   const response = await fetch(`${await resolveApiUrl()}/auth/x/authorize?return_to=${encodeURIComponent(returnTo)}`, {
     headers: { "Content-Type": "application/json", "X-PG-Locale": locale },
     credentials: "include",
@@ -1230,13 +1231,13 @@ export function getPmAccount() { return requestStrict<PmAccountView>("/portfolio
 export function getPmNavHistory() { return requestStrict<PmNavHistory>("/portfolio/pm/history"); }
 
 export function getPortfolioSnapshot(locale: Locale = defaultLocale) {
-  return api<PortfolioSnapshot>("/portfolio", { fallback: { connected: false, nav: 0, available_cash: 0, daily_change: 0, daily_change_pct: null, nav_history: [], holdings: [], asset_classes: {}, accounts: [], connections: [], providers: { plaid: false, ibkr: false, hyperliquid: true, evm: false } }, locale });
+  return api<PortfolioSnapshot>("/portfolio", { fallback: { unavailable: true, connected: false, nav: 0, available_cash: 0, daily_change: 0, daily_change_pct: null, nav_history: [], holdings: [], asset_classes: {}, accounts: [], connections: [], providers: { plaid: false, ibkr: false, hyperliquid: true, evm: false } }, locale });
 }
 
 export type PortfolioConnection = { id: string; provider: string; name: string; status: string; last_sync: string | null; error?: string | null; can_refresh?: boolean; refresh_requested_at?: string | null };
 export type PortfolioHolding = { symbol: string; instrument: string; name: string; chain: string | null; quantity: number; price: number; value: number; weight: number; change_24h: number; change_24h_pct: number; asset_class: string; native: boolean; verified: boolean; priced: boolean; logo?: string | null };
 export type PortfolioAccountSummary = { id: string; provider: string; name: string; status: string; nav: number; available_cash: number; daily_change: number; as_of: string | null };
-export type PortfolioSnapshot = { connected: boolean; stale?: boolean; data_as_of?: string | null; nav: number; available_cash: number; daily_change?: number; daily_change_pct?: number | null; unrealized_pnl?: number | null; positions?: PortfolioPosition[]; nav_history: Array<{ date: string; nav: number }>; holdings?: PortfolioHolding[]; asset_classes?: Record<string, number>; accounts?: PortfolioAccountSummary[]; connections: PortfolioConnection[]; providers: { plaid: boolean; plaid_refresh?: boolean; plaid_cash_transactions?: boolean; plaid_webhooks?: boolean; ibkr: boolean; hyperliquid: boolean; evm?: boolean } };
+export type PortfolioSnapshot = { unavailable?: boolean; connected: boolean; stale?: boolean; data_as_of?: string | null; nav: number; available_cash: number; daily_change?: number; daily_change_pct?: number | null; unrealized_pnl?: number | null; positions?: PortfolioPosition[]; nav_history: Array<{ date: string; nav: number }>; holdings?: PortfolioHolding[]; asset_classes?: Record<string, number>; accounts?: PortfolioAccountSummary[]; connections: PortfolioConnection[]; providers: { plaid: boolean; plaid_refresh?: boolean; plaid_cash_transactions?: boolean; plaid_webhooks?: boolean; ibkr: boolean; hyperliquid: boolean; evm?: boolean } };
 export type PortfolioPosition = { symbol: string; venue: string; side: string; quantity: number; mark_price: number; unrealized_pnl: number };
 export type PortfolioInvestmentTransaction = { id: string; account_id: string; provider_account_id: string; date: string; transaction_datetime?: string | null; name: string; symbol?: string | null; type: string; subtype?: string | null; quantity: number; price: number; amount: number; fees: number; currency?: string | null; cancelled: boolean };
 
@@ -1293,7 +1294,7 @@ export function addWallet() {
 }
 
 export function getDataSources(locale: Locale = defaultLocale) {
-  return api<{ mockMode: boolean; sources: DataSourceRow[] }>("/admin/data-sources", { fallback: { mockMode: false, sources: [] }, locale });
+  return api<{ mockMode: boolean; sources: DataSourceRow[]; unavailable?: boolean; http_status?: number; error_code?: string }>("/admin/data-sources", { fallback: { mockMode: false, sources: [], unavailable: true }, locale });
 }
 
 export function syncDataSource(providerId: string) {
@@ -1658,8 +1659,8 @@ export async function transcribeSecretaryAudio(audio: Blob, locale: Locale, sign
   return response.json() as Promise<{ text: string; language: Locale }>;
 }
 
-export function createAgentConversation(title?: string) {
-  return requestStrict<{ conversation: AgentConversation }>("/api/agent/conversations", { method: "POST", body: JSON.stringify({ title }) });
+export function createAgentConversation(title?: string, signal?: AbortSignal) {
+  return requestStrict<{ conversation: AgentConversation }>("/api/agent/conversations", { method: "POST", body: JSON.stringify({ title }), signal });
 }
 
 export function deleteAgentConversation(id: string) {
@@ -2568,9 +2569,9 @@ export function deleteAgentAttachment(id: string) {
     method: "DELETE"
   });
 }
-export function setAgentPermission(id: string, permission_mode: AgentPermissionMode, acknowledge_full_access = false) {
+export function setAgentPermission(id: string, permission_mode: AgentPermissionMode, acknowledge_full_access = false, signal?: AbortSignal) {
   return requestStrict<{conversation: AgentConversation}>(`/api/agent/conversations/${encodeURIComponent(id)}`, {
-    method: "PATCH", body: JSON.stringify({permission_mode, acknowledge_full_access})
+    method: "PATCH", body: JSON.stringify({permission_mode, acknowledge_full_access}), signal
   });
 }
 export function approveAgentTool(id: string, decision: "approved" | "denied") {

@@ -69,7 +69,7 @@ d.style.colorScheme=resolved;
 var fs=read('pg_font_scale');
 d.dataset.fontScale=(fs==='compact'||fs==='large')?fs:'default';
 var vs=read('pg_visual_style');
-d.dataset.visualStyle=(vs==='classic')?'classic':${JSON.stringify(visualStyleDefault)};
+d.dataset.visualStyle=(vs==='classic'||vs==='glass')?vs:${JSON.stringify(visualStyleDefault)};
 }catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,0 +1,942 @@
+{
+  "base": "48fe3154fe56a0640d08148f0c7eaf7825af2da7",
+  "page_files": 90,
+  "localized": 54,
+  "legacy_aliases": 33,
+  "root_redirects": 1,
+  "public_legal": 2,
+  "source_only_baseline": true,
+  "routes": [
+    {
+      "route": "/[locale]/forgot-password",
+      "file": "apps/web/app/[locale]/(auth)/forgot-password/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ forgotPassword }"
+      ]
+    },
+    {
+      "route": "/[locale]/login",
+      "file": "apps/web/app/[locale]/(auth)/login/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "auth-legal-notice",
+        "wallet-login-buttons",
+        "password-input",
+        "captcha-modal",
+        "puzzle-captcha",
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ emailLogin, extractApiError, googleLogin, resendVerificationEmail }"
+      ]
+    },
+    {
+      "route": "/[locale]/reset-password",
+      "file": "apps/web/app/[locale]/(auth)/reset-password/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider",
+        "password-input"
+      ],
+      "api_helpers": [
+        "{ extractApiError, resetPassword }"
+      ]
+    },
+    {
+      "route": "/[locale]/signup",
+      "file": "apps/web/app/[locale]/(auth)/signup/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "auth-legal-notice",
+        "wallet-login-buttons",
+        "password-input",
+        "captcha-modal",
+        "puzzle-captcha",
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ emailRegister, extractApiError, googleLogin }"
+      ]
+    },
+    {
+      "route": "/[locale]/verify-email",
+      "file": "apps/web/app/[locale]/(auth)/verify-email/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ emailVerify, resendVerificationEmail }"
+      ]
+    },
+    {
+      "route": "/[locale]/account",
+      "file": "apps/web/app/[locale]/account/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma",
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ AuthResponse, changePassword, confirmIMessageVerification, getAgentQuota, getIMessageConfig, getMe, IMessageConfig, logout, requestIMessageVerification, setPassword }"
+      ]
+    },
+    {
+      "route": "/[locale]/admin/billing-intents",
+      "file": "apps/web/app/[locale]/admin/billing-intents/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ api }"
+      ]
+    },
+    {
+      "route": "/[locale]/admin/gateway",
+      "file": "apps/web/app/[locale]/admin/gateway/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "gateway-admin-console",
+        "puregamma"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/admin",
+      "file": "apps/web/app/[locale]/admin/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "admin-credit-console",
+        "admin-users-table",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getAdminLlmStatus, getAdminOverview, getAdminSystemStatus, getAdminUsers, getAdminWorkers }"
+      ]
+    },
+    {
+      "route": "/[locale]/admin/stripe-events",
+      "file": "apps/web/app/[locale]/admin/stripe-events/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ api }"
+      ]
+    },
+    {
+      "route": "/[locale]/api",
+      "file": "apps/web/app/[locale]/api/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "api-docs-embed"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/auth/google/callback",
+      "file": "apps/web/app/[locale]/auth/google/callback/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ googleCallback }"
+      ]
+    },
+    {
+      "route": "/[locale]/backtest",
+      "file": "apps/web/app/[locale]/backtest/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "backtest-lab"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/billing/cancel",
+      "file": "apps/web/app/[locale]/billing/cancel/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/billing/mock-checkout",
+      "file": "apps/web/app/[locale]/billing/mock-checkout/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider"
+      ],
+      "api_helpers": [
+        "{ apiBaseUrl }"
+      ]
+    },
+    {
+      "route": "/[locale]/billing",
+      "file": "apps/web/app/[locale]/billing/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "actions",
+        "charts",
+        "pg-table",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getBillingBudget, getBillingCredits, getBillingRewards, getBillingSubscription }"
+      ]
+    },
+    {
+      "route": "/[locale]/billing/success",
+      "file": "apps/web/app/[locale]/billing/success/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/chat/[conversationId]",
+      "file": "apps/web/app/[locale]/chat/[conversationId]/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "agent-chat"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/chat",
+      "file": "apps/web/app/[locale]/chat/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "agent-chat",
+        "chrono/chrono-slices",
+        "terminal/intelligence-shell"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/daily-push",
+      "file": "apps/web/app/[locale]/daily-push/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "daily-push-settings",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getBillingSubscription, getDailyPushPreferences }"
+      ]
+    },
+    {
+      "route": "/[locale]/dashboard",
+      "file": "apps/web/app/[locale]/dashboard/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "global-market-terminal",
+        "hyperliquid-market-panel",
+        "markdown",
+        "today-activity",
+        "puregamma",
+        "terminal/editorial",
+        "terminal/intelligence-hero",
+        "terminal/portfolio-nav",
+        "chrono/chrono-entrance",
+        "chrono/chrono-slices"
+      ],
+      "api_helpers": [
+        "{ getDashboard, type ReportRow }"
+      ]
+    },
+    {
+      "route": "/[locale]/data-sources",
+      "file": "apps/web/app/[locale]/data-sources/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma",
+        "data-source-table"
+      ],
+      "api_helpers": [
+        "{ getDataSources }"
+      ]
+    },
+    {
+      "route": "/[locale]/docs",
+      "file": "apps/web/app/[locale]/docs/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "docs-embed"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/gateway",
+      "file": "apps/web/app/[locale]/gateway/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "gateway-console",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getGatewayDashboard, getGatewayKeys, getGatewayRequests, getGatewayUsage }"
+      ]
+    },
+    {
+      "route": "/[locale]/integrations",
+      "file": "apps/web/app/[locale]/integrations/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getIntegrations }"
+      ]
+    },
+    {
+      "route": "/[locale]/internal/login",
+      "file": "apps/web/app/[locale]/internal/login/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "i18n/LocaleProvider",
+        "ui"
+      ],
+      "api_helpers": [
+        "{ internalAdminLogin }"
+      ]
+    },
+    {
+      "route": "/[locale]/jev-trader",
+      "file": "apps/web/app/[locale]/jev-trader/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "jev-advisory-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/memory",
+      "file": "apps/web/app/[locale]/memory/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "memory-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/mobile-access",
+      "file": "apps/web/app/[locale]/mobile-access/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "imessage-section",
+        "mobile-access-panel",
+        "puregamma"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/nautilus",
+      "file": "apps/web/app/[locale]/nautilus/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/news",
+      "file": "apps/web/app/[locale]/news/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "news-feed",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getNewsFeed }"
+      ]
+    },
+    {
+      "route": "/[locale]/onboarding/assets",
+      "file": "apps/web/app/[locale]/onboarding/assets/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma",
+        "selection-box"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/onboarding/channels",
+      "file": "apps/web/app/[locale]/onboarding/channels/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ saveOnboarding }"
+      ]
+    },
+    {
+      "route": "/[locale]/onboarding/style",
+      "file": "apps/web/app/[locale]/onboarding/style/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "selection-box"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/options",
+      "file": "apps/web/app/[locale]/options/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "options-surface",
+        "puregamma",
+        "pg-table"
+      ],
+      "api_helpers": [
+        "{ getEarningsGamma, getLongGammaCandidates }"
+      ]
+    },
+    {
+      "route": "/[locale]",
+      "file": "apps/web/app/[locale]/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma",
+        "landing-footer-rotator",
+        "model-upgrade",
+        "trading-architecture"
+      ],
+      "api_helpers": [
+        "{ getGatewayCatalog }"
+      ]
+    },
+    {
+      "route": "/[locale]/playbooks",
+      "file": "apps/web/app/[locale]/playbooks/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "actions",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getPlaybooks }"
+      ]
+    },
+    {
+      "route": "/[locale]/portfolio",
+      "file": "apps/web/app/[locale]/portfolio/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma",
+        "portfolio-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/pricing",
+      "file": "apps/web/app/[locale]/pricing/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "puregamma"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/reports",
+      "file": "apps/web/app/[locale]/reports/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "reports-console"
+      ],
+      "api_helpers": [
+        "{ getReports }"
+      ]
+    },
+    {
+      "route": "/[locale]/research/[runId]",
+      "file": "apps/web/app/[locale]/research/[runId]/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "research-run-detail"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/research",
+      "file": "apps/web/app/[locale]/research/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "research-console",
+        "chrono/chrono-slices",
+        "terminal/intelligence-shell"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/secretary",
+      "file": "apps/web/app/[locale]/secretary/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "secretary-console",
+        "chrono/chrono-slices",
+        "terminal/intelligence-shell"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/signals",
+      "file": "apps/web/app/[locale]/signals/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "charts",
+        "puregamma"
+      ],
+      "api_helpers": [
+        "{ getSignals }"
+      ]
+    },
+    {
+      "route": "/[locale]/strategies/[strategyId]",
+      "file": "apps/web/app/[locale]/strategies/[strategyId]/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/strategies",
+      "file": "apps/web/app/[locale]/strategies/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/live/account",
+      "file": "apps/web/app/[locale]/trading/live/account/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "live-trading-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/live/connect",
+      "file": "apps/web/app/[locale]/trading/live/connect/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "live-trading-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/live/orders",
+      "file": "apps/web/app/[locale]/trading/live/orders/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "live-trading-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/live",
+      "file": "apps/web/app/[locale]/trading/live/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "live-trading-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/paper",
+      "file": "apps/web/app/[locale]/trading/paper/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/positions",
+      "file": "apps/web/app/[locale]/trading/positions/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/risk",
+      "file": "apps/web/app/[locale]/trading/risk/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/[locale]/trading/runtime",
+      "file": "apps/web/app/[locale]/trading/runtime/page.tsx",
+      "localized": true,
+      "redirect": false,
+      "components": [
+        "strategy-runtime-console"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/account",
+      "file": "apps/web/app/account/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/admin/billing-intents",
+      "file": "apps/web/app/admin/billing-intents/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/admin/gateway",
+      "file": "apps/web/app/admin/gateway/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/admin",
+      "file": "apps/web/app/admin/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/admin/stripe-events",
+      "file": "apps/web/app/admin/stripe-events/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/api",
+      "file": "apps/web/app/api/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/billing/cancel",
+      "file": "apps/web/app/billing/cancel/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/billing/mock-checkout",
+      "file": "apps/web/app/billing/mock-checkout/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/billing",
+      "file": "apps/web/app/billing/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/billing/success",
+      "file": "apps/web/app/billing/success/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/chat",
+      "file": "apps/web/app/chat/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/daily-push",
+      "file": "apps/web/app/daily-push/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/dashboard",
+      "file": "apps/web/app/dashboard/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/data-sources",
+      "file": "apps/web/app/data-sources/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/forgot-password",
+      "file": "apps/web/app/forgot-password/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/gateway",
+      "file": "apps/web/app/gateway/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/integrations",
+      "file": "apps/web/app/integrations/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/internal/login",
+      "file": "apps/web/app/internal/login/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/login",
+      "file": "apps/web/app/login/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/mobile-access",
+      "file": "apps/web/app/mobile-access/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/nautilus",
+      "file": "apps/web/app/nautilus/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/news",
+      "file": "apps/web/app/news/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/onboarding/assets",
+      "file": "apps/web/app/onboarding/assets/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/onboarding/channels",
+      "file": "apps/web/app/onboarding/channels/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/onboarding/style",
+      "file": "apps/web/app/onboarding/style/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/",
+      "file": "apps/web/app/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/playbooks",
+      "file": "apps/web/app/playbooks/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/portfolio",
+      "file": "apps/web/app/portfolio/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/privacy",
+      "file": "apps/web/app/privacy/page.tsx",
+      "localized": false,
+      "redirect": false,
+      "components": [
+        "public-legal-page"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/reports",
+      "file": "apps/web/app/reports/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/reset-password",
+      "file": "apps/web/app/reset-password/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/secretary",
+      "file": "apps/web/app/secretary/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/signals",
+      "file": "apps/web/app/signals/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/signup",
+      "file": "apps/web/app/signup/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    },
+    {
+      "route": "/terms",
+      "file": "apps/web/app/terms/page.tsx",
+      "localized": false,
+      "redirect": false,
+      "components": [
+        "public-legal-page"
+      ],
+      "api_helpers": []
+    },
+    {
+      "route": "/verify-email",
+      "file": "apps/web/app/verify-email/page.tsx",
+      "localized": false,
+      "redirect": true,
+      "components": [],
+      "api_helpers": []
+    }
+  ]
+}
