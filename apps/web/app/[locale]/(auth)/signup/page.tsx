@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Chrome, Loader2 } from "lucide-react";
@@ -30,6 +30,7 @@ export default function SignUpPage() {
   const [captchaError, setCaptchaError] = useState("");
   const [captchaKey, setCaptchaKey] = useState(0);
   const [captchaRetry, setCaptchaRetry] = useState(0);
+  const captchaOpener = useRef<HTMLElement | null>(null);
   const zh = locale === "zh";
 
   const handleGoogleLogin = async () => {
@@ -54,6 +55,8 @@ export default function SignUpPage() {
     e.preventDefault();
     if (!email || !password || busy) return;
     if (!EMAIL_RE.test(email.trim())) { setError(t(locale, "common.auth.invalidEmail")); return; }
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    captchaOpener.current = submitter instanceof HTMLElement ? submitter : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setError("");
     openCaptcha();
   };
@@ -115,17 +118,25 @@ export default function SignUpPage() {
         </div>
 
         <div className="space-y-4 border border-border-pg bg-bg-panel p-6 rounded-2xl">
-          {error ? <p className="border border-border-pg bg-bg-panel-muted px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
+          {error ? <p role="alert" className="border border-border-pg bg-bg-panel-muted px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
 
-          <form onSubmit={handleEmailRegister} className="space-y-3">
+          <form onSubmit={handleEmailRegister} aria-busy={busy} className="space-y-3">
+            <label htmlFor="signup-name" className="block text-sm font-medium">{zh ? "称呼（可选）" : "Name (optional)"}</label>
             <input
+              id="signup-name"
+              name="name"
+              autoComplete="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t(locale, "common.auth.namePlaceholder")}
               className="w-full border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg placeholder:text-text-pg-dim outline-none focus:border-border-pg-strong rounded-lg"
             />
+            <label htmlFor="signup-email" className="block text-sm font-medium">{zh ? "邮箱" : "Email address"}</label>
             <input
+              id="signup-email"
+              name="email"
+              autoComplete="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -133,13 +144,18 @@ export default function SignUpPage() {
               className="w-full border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg placeholder:text-text-pg-dim outline-none focus:border-border-pg-strong rounded-lg"
               required
             />
+            <label htmlFor="signup-password" className="block text-sm font-medium">{zh ? "密码" : "Password"}</label>
             <PasswordInput
+              id="signup-password"
+              name="password"
+              describedBy="signup-password-hint"
               value={password}
               onChange={setPassword}
               placeholder={t(locale, "common.auth.passwordPlaceholder")}
               minLength={8}
               autoComplete="new-password"
             />
+            <p id="signup-password-hint" className="text-xs leading-5 text-text-pg-muted">{t(locale, "common.auth.passwordRequirements")}</p>
             <button
               type="submit"
               disabled={busy || !email || !password}
@@ -177,6 +193,7 @@ export default function SignUpPage() {
 
       <CaptchaModal
         open={captchaOpen}
+        returnFocusTo={captchaOpener.current}
         busy={busy}
         error={captchaError}
         resetKey={captchaKey}

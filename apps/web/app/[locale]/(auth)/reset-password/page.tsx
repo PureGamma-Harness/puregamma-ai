@@ -38,15 +38,20 @@ export default function ResetPasswordPage() {
     setStatus("form");
   }, [locale]);
 
+  useEffect(() => {
+    if (status !== "success") return;
+    const timer = setTimeout(() => router.push(withLocale(locale, "/chat")), 3000);
+    return () => clearTimeout(timer);
+  }, [status, locale, router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password || password.length < 8) return;
+    if (!password || password.length < 8 || busy) return;
     setBusy(true);
     setErrorMsg("");
     try {
       await resetPassword(token, password);
       setStatus("success");
-      setTimeout(() => router.push(`/${locale}/chat`), 3000);
     } catch (err: unknown) {
       const apiError = extractApiError(err);
       if (apiError.code === "INVALID_OR_EXPIRED_TOKEN") {
@@ -84,7 +89,8 @@ export default function ResetPasswordPage() {
           ) : status === "success" ? (
             <div className="flex flex-col items-center gap-3 py-4">
               <CheckCircle className="h-8 w-8 text-status-positive" />
-              <p className="text-sm text-text-pg">{t(locale, "common.auth.resetPasswordSuccess")}</p>
+              <p role="status" className="text-sm text-text-pg">{t(locale, "common.auth.resetPasswordSuccess")}</p>
+              <Link href={withLocale(locale, "/chat")} className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">{zh ? "继续到 Agent" : "Continue to Agent"}</Link>
             </div>
           ) : status === "error" ? (
             <div className="flex flex-col items-center gap-3 py-4">
@@ -93,10 +99,11 @@ export default function ResetPasswordPage() {
               <Link href={withLocale(locale, "/forgot-password")} className="text-sm font-medium text-text-pg underline underline-offset-2">{t(locale, "common.auth.forgotPasswordTitle")}</Link>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {errorMsg ? <p className="text-sm text-status-negative">{errorMsg}</p> : null}
-              <PasswordInput value={password} onChange={setPassword} placeholder={t(locale, "common.auth.newPassword")} minLength={8} autoComplete="new-password" />
-              <p className="text-xs text-text-pg-dim">{t(locale, "common.auth.passwordRequirements")}</p>
+            <form onSubmit={handleSubmit} aria-busy={busy} className="space-y-3">
+              {errorMsg ? <p role="alert" className="text-sm text-status-negative">{errorMsg}</p> : null}
+              <label htmlFor="reset-password" className="block text-sm font-medium">{t(locale, "common.auth.newPassword")}</label>
+              <PasswordInput id="reset-password" name="new-password" value={password} onChange={setPassword} placeholder={t(locale, "common.auth.newPassword")} minLength={8} autoComplete="new-password" describedBy="reset-password-hint" />
+              <p id="reset-password-hint" className="text-xs text-text-pg-dim">{t(locale, "common.auth.passwordRequirements")}</p>
               <button type="submit" disabled={busy || !password || password.length < 8} className="inline-flex w-full items-center justify-center gap-2 border border-border-pg bg-pg-white px-4 py-2.5 text-sm font-semibold text-pg-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 rounded-lg">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {t(locale, "common.auth.resetPasswordTitle")}

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Info } from "lucide-react";
 import { Badge } from "@/components/puregamma";
 import { normalizeLocale, withLocale, type Locale } from "@/i18n/routing";
 import { SelectionBox } from "@/components/selection-box";
+import { OnboardingProgress } from "@/components/onboarding-progress";
+import { readOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import { getMessageNamespace, t } from "@/lib/translations";
 
 export default function LocalizedOnboardingAssetsPage() {
@@ -14,22 +16,31 @@ export default function LocalizedOnboardingAssetsPage() {
   const router = useRouter();
   const copy = getMessageNamespace(locale, "onboarding").assets;
   const [selected, setSelected] = useState<Set<string>>(new Set(["BTC", "ETH", "SOL"]));
+  const [stored, setStored] = useState(true);
+
+  useEffect(() => { setSelected(new Set(readOnboardingDraft().assets)); }, []);
+
+  const choose = (next: Set<string>) => {
+    setSelected(next);
+    setStored(saveOnboardingDraft({ assets: [...next] }));
+  };
 
   const toggle = (symbol: string) => {
     const next = new Set(selected);
     if (next.has(symbol)) next.delete(symbol);
     else next.add(symbol);
-    setSelected(next);
+    choose(next);
   };
 
   const handleContinue = () => {
     if (selected.size === 0) return;
-    localStorage.setItem("pg_onboarding_assets", JSON.stringify([...selected]));
+    saveOnboardingDraft({ assets: [...selected] });
     router.push(withLocale(locale, "/onboarding/style"));
   };
 
   return (
     <div className="mx-auto max-w-3xl py-8">
+      <OnboardingProgress locale={locale} step={1} />
       <div className="mb-8">
         <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-text-pg-muted">
           <span>{copy.step}</span>
@@ -38,10 +49,10 @@ export default function LocalizedOnboardingAssetsPage() {
         <h1 className="mt-4 text-3xl font-semibold">{copy.title}</h1>
         <p className="mt-3 max-w-xl text-sm leading-6 text-text-pg-muted">{copy.subtitle}</p>
         <div className="mt-4 flex gap-2">
-          <button onClick={() => setSelected(new Set(copy.items.map((asset) => asset.symbol)))} className="border border-border-pg px-3 py-1.5 text-xs hover:border-border-pg-strong rounded-lg">
+          <button type="button" onClick={() => choose(new Set(copy.items.map((asset) => asset.symbol)))} className="min-h-10 border border-border-pg px-3 py-1.5 text-xs hover:border-border-pg-strong rounded-lg">
             {copy.selectAll}
           </button>
-          <button onClick={() => setSelected(new Set())} className="border border-border-pg px-3 py-1.5 text-xs hover:border-border-pg-strong rounded-lg">
+          <button type="button" onClick={() => choose(new Set())} className="min-h-10 border border-border-pg px-3 py-1.5 text-xs hover:border-border-pg-strong rounded-lg">
             {copy.clear}
           </button>
         </div>
@@ -53,6 +64,8 @@ export default function LocalizedOnboardingAssetsPage() {
           return (
             <button
               key={asset.symbol}
+              type="button"
+              aria-pressed={isSelected}
               onClick={() => toggle(asset.symbol)}
               className={`border p-5 text-left transition  rounded-xl ${
                 isSelected ? "border-border-pg-strong bg-bg-panel-muted" : "border-border-pg bg-bg-panel hover:border-border-pg-strong"
@@ -73,8 +86,9 @@ export default function LocalizedOnboardingAssetsPage() {
         })}
       </div>
 
-      <div className="mt-8 flex items-center justify-between gap-4 border border-border-pg bg-bg-panel-muted px-4 py-3 rounded-lg">
-        <div className="flex items-center gap-2 text-sm text-text-pg-muted">
+      {!stored ? <p role="status" className="mt-4 text-sm text-text-pg-muted">{locale === "zh" ? "进度暂存在当前标签页中，刷新后可能需要重新选择。" : "Your choices are kept in this tab. You may need to select them again after a refresh."}</p> : null}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border border-border-pg bg-bg-panel-muted px-4 py-3 rounded-lg">
+        <div role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-text-pg-muted">
           <Info className="h-4 w-4 shrink-0" aria-hidden />
           {selectedLabel(locale, selected.size)}
         </div>

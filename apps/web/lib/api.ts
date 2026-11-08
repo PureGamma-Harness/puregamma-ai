@@ -1,6 +1,7 @@
 import type { IntegrationRow, PositionRow, SignalRow, StrategyRow } from "@/components/puregamma";
 import { defaultLocale, stripLocale, type Locale } from "@/i18n/routing";
 import { requiresAuthentication } from "@/lib/route-access";
+import { safeReturnTo } from "@/lib/auth-navigation";
 import { t } from "@/lib/translations";
 import { syncUserStateFromPayload } from "@/lib/user-state";
 
@@ -197,7 +198,7 @@ export async function internalAdminLogin(username: string, password: string) {
 
 export async function googleLogin(locale: Locale = defaultLocale) {
   const requested = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("returnTo");
-  const returnTo = requested?.startsWith("/") && !requested.startsWith("//") ? requested : `/${locale}/chat`;
+  const returnTo = safeReturnTo(requested, `/${locale}/chat`);
   const response = await fetch(`${await resolveApiUrl()}/auth/google/authorize?return_to=${encodeURIComponent(returnTo)}`, {
     headers: { "Content-Type": "application/json", "X-PG-Locale": locale },
     credentials: "include",
@@ -238,7 +239,7 @@ export async function googleCallback(code: string, state: string, locale: Locale
 
 export async function xLogin(locale: Locale = defaultLocale) {
   const requested = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("returnTo");
-  const returnTo = requested?.startsWith("/") && !requested.startsWith("//") ? requested : `/${locale}/chat`;
+  const returnTo = safeReturnTo(requested, `/${locale}/chat`);
   const response = await fetch(`${await resolveApiUrl()}/auth/x/authorize?return_to=${encodeURIComponent(returnTo)}`, {
     headers: { "Content-Type": "application/json", "X-PG-Locale": locale },
     credentials: "include",
