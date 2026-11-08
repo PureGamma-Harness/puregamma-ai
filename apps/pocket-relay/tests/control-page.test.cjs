@@ -12,13 +12,15 @@ const extracted = spawnSync(process.env.PYTHON || 'python', ['-c',
 assert.equal(extracted.status, 0, extracted.stderr);
 const script = extracted.stdout.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-async function browser({ secret = '', running = true } = {}) {
+async function browser({ secret = '', running = true, pageUrl = 'http://localhost:8788/_pocket' } = {}) {
   const elements = new Map();
   const calls = [];
   const revoked = [];
   const listeners = new Map();
   let sequence = 0;
   const state = { secret, running, pin: '12345678', error: null };
+  const pageLocation = new URL(pageUrl);
+  const mount = pageLocation.pathname.slice(0, pageLocation.pathname.lastIndexOf('/'));
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
       value: '', textContent: '', hidden: false, disabled: false,
@@ -38,9 +40,13 @@ async function browser({ secret = '', running = true } = {}) {
       setItem() { throw new Error('RPC secret must not use persistent storage'); } },
     sessionStorage: { getItem() { throw new Error('RPC secret must not use browser storage'); },
       setItem() { throw new Error('RPC secret must not use browser storage'); } },
-    async fetch(url, options) {
+    async fetch(input, options) {
+      const resolved = new URL(input, pageLocation);
+      assert.equal(resolved.origin, pageLocation.origin, 'RPC requests must keep the page origin');
+      assert.ok(resolved.pathname.startsWith(mount + '/rpc/'), 'RPC requests must keep the mounted directory');
+      const url = resolved.pathname.slice(mount.length) + resolved.search;
       const headers = new Headers(options.headers);
-      calls.push({ url, options, headers });
+      calls.push({ url: resolved.href, options, headers });
       assert.ok(url.startsWith('/rpc/'), 'RPC helper must keep same-origin paths');
       assert.equal(options.mode, 'same-origin');
       assert.equal(options.redirect, 'error');
@@ -148,3 +154,20 @@ test('a rejected session prompts again and never persists into a fresh page', as
   assert.equal(fresh.element('rpc-key-form').hidden, false);
   assert.ok(fresh.calls.every((call) => !call.headers.has('x-pocket-rpc-token')));
 });
+
+for (const mount of ['/pocket', '/tools/pocket', '/%E5%8F%A3%E8%A2%8B']) {
+  test(`mounted control page keeps authenticated RPC and QR under ${mount}`, async () => {
+    const page = await browser({ secret: 'offline-mounted-key', pageUrl: `http://localhost:8788${mount}/_pocket` });
+    await unlock(page, 'offline-mounted-key');
+    assert.equal(page.element('pub-pin').textContent, '12345678');
+    assert.equal(page.element('rpc-key-form').hidden, true);
+    assert.match(page.element('pub-qr').src, /^blob:/);
+    await page.run("rot('public')");
+    assert.equal(page.element('pub-pin').textContent, '87654321');
+    await page.run('toggleTunnel()');
+    assert.equal(page.state.running, false);
+    assert.ok(page.calls.every(call => new URL(call.url).pathname.startsWith(mount + '/rpc/')));
+    assert.ok(page.calls.filter(call => call.headers.has('x-pocket-rpc-token')).every(call =>
+      call.headers.get('x-pocket-rpc-token') === 'offline-mounted-key'));
+  });
+}

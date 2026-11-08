@@ -26,6 +26,9 @@
 当前页面内存，通过 `x-pocket-rpc-token` 请求状态、二维码和管理操作；不写入
 网址、localStorage 或 sessionStorage。关闭页面后需重新填写。
 
+挂载到路径前缀时，控制页与 RPC 必须位于同一前缀，例如
+`/pocket/_pocket` 与 `/pocket/rpc/*`。页面使用相对请求定位 RPC，无需把管理密钥写入网址。
+
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
