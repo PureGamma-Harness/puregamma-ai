@@ -151,7 +151,7 @@ export function BacktestLab({ locale }: { locale: Locale }) {
         <p className="max-w-3xl text-sm leading-6 text-text-pg-muted">{copy.subtitle}</p>
       </header>
 
-      {error ? <p className="border border-border-pg bg-bg-panel px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
+      {error ? <p className="break-words border border-border-pg bg-bg-panel px-4 py-2.5 text-sm text-status-negative rounded-lg">{error}</p> : null}
 
       <section className="border border-border-pg bg-bg-panel p-4 rounded-xl">
         <div className="flex flex-wrap items-center gap-3 text-xs">
