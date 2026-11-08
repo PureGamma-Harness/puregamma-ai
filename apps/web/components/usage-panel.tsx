@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartTooltip } from "@/components/charts";
 import { EmptyState, MetricCard, ResearchCard } from "@/components/puregamma";
@@ -41,6 +41,8 @@ export function UsagePanel({ locale, initialUsage }: Props) {
   const [customEnd, setCustomEnd] = useState("");
   const [usage, setUsage] = useState(initialUsage);
   const [loading, setLoading] = useState(false);
+  const [rangeError, setRangeError] = useState("");
+  const requestId = useRef(0);
   const [modelFilter, setModelFilter] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | null>(null);
 
@@ -52,19 +54,20 @@ export function UsagePanel({ locale, initialUsage }: Props) {
     { id: "90d", label: zh ? "90 天" : "90d", days: 90 },
   ];
 
-  const applyRange = async (start: Date, end: Date, granularity: "hour" | "day") => {
-    setLoading(true);
-    const result = await getGatewayUsage(locale, {
-      start: start.toISOString().slice(0, 19) + "+00:00",
-      end: end.toISOString().slice(0, 19) + "+00:00",
-      granularity,
-      model: modelFilter || undefined,
-      api_key_id: keyFilter || undefined,
-    });
-    setUsage(result);
-    setLoading(false);
+  const applyRange = async (start: Date, end: Date, granularity: "hour" | "day", filters = { model: modelFilter, key: keyFilter }) => {
+    const request = ++requestId.current;
+    setRangeError(""); setLoading(true);
+    try {
+      const result = await getGatewayUsage(locale, {
+        start: start.toISOString().slice(0, 19) + "+00:00",
+        end: end.toISOString().slice(0, 19) + "+00:00",
+        granularity,
+        model: filters.model || undefined,
+        api_key_id: filters.key || undefined,
+      });
+      if (request === requestId.current) setUsage(result);
+    } finally { if (request === requestId.current) setLoading(false); }
   };
-
   const selectPreset = (id: Preset) => {
     setPreset(id);
     const days = presets.find((item) => item.id === id)?.days ?? 7;
@@ -77,7 +80,7 @@ export function UsagePanel({ locale, initialUsage }: Props) {
     if (!customStart || !customEnd) return;
     const start = new Date(customStart);
     const end = new Date(customEnd);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) return;
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) { setRangeError(zh ? "结束日期须晚于开始日期。" : "Choose an end date after the start date."); return; }
     setPreset("custom" as Preset);
     const spanHours = (end.getTime() - start.getTime()) / (60 * 60 * 1000);
     void applyRange(start, end, spanHours <= 48 ? "hour" : "day");
@@ -85,6 +88,7 @@ export function UsagePanel({ locale, initialUsage }: Props) {
 
   useEffect(() => {
     void applyRange(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), now, "day");
+    return () => { requestId.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -114,38 +118,40 @@ export function UsagePanel({ locale, initialUsage }: Props) {
   }));
 
   const models = useMemo(() => {
-    const names = Array.from(new Set(byModel.map((row) => row.model).filter(Boolean) as string[]));
+    const names = Array.from(new Set([...initialUsage.by_model, ...byModel].map((row) => row.model).filter(Boolean) as string[]));
+    if (modelFilter && !names.includes(modelFilter)) names.push(modelFilter);
     return names;
-  }, [byModel]);
-  const keys = useMemo(() => byKey.filter((row): row is GatewayUsageBreakdownRow & { api_key_id: string } => Boolean(row.api_key_id)), [byKey]);
+  }, [initialUsage.by_model, byModel, modelFilter]);
+  const keys = useMemo(() => {
+    const known = new Map<string, { api_key_id: string; name?: string; prefix?: string }>();
+    for (const row of [...initialUsage.by_key, ...byKey]) {
+      if (row.api_key_id) known.set(row.api_key_id, { api_key_id: row.api_key_id, name: row.name, prefix: row.prefix });
+    }
+    if (keyFilter && !known.has(keyFilter)) known.set(keyFilter, { api_key_id: keyFilter });
+    return Array.from(known.values());
+  }, [initialUsage.by_key, byKey, keyFilter]);
 
-  const selectModel = (model: string | null) => {
-    setModelFilter(model);
+  const applyFilters = (model: string | null, key: string | null) => {
     if (preset === "custom") {
-      if (customStart && customEnd) void applyCustom();
+      const start = new Date(customStart), end = new Date(customEnd);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start < end) {
+        void applyRange(start, end, (end.getTime() - start.getTime()) / 3_600_000 <= 48 ? "hour" : "day", { model, key });
+      }
     } else {
       const days = presets.find((item) => item.id === preset)?.days ?? 7;
       const end = new Date(now.getTime());
-      void applyRange(new Date(end.getTime() - days * 24 * 60 * 60 * 1000), end, preset === "24h" ? "hour" : "day");
+      void applyRange(new Date(end.getTime() - days * 86_400_000), end, preset === "24h" ? "hour" : "day", { model, key });
     }
   };
-
-  const selectKey = (keyId: string | null) => {
-    setKeyFilter(keyId);
-    if (preset === "custom") {
-      if (customStart && customEnd) void applyCustom();
-    } else {
-      const days = presets.find((item) => item.id === preset)?.days ?? 7;
-      const end = new Date(now.getTime());
-      void applyRange(new Date(end.getTime() - days * 24 * 60 * 60 * 1000), end, preset === "24h" ? "hour" : "day");
-    }
-  };
+  const selectModel = (model: string | null) => { setModelFilter(model); applyFilters(model, keyFilter); };
+  const selectKey = (key: string | null) => { setKeyFilter(key); applyFilters(modelFilter, key); };
 
   const hasData = buckets.some((bucket) => bucket.requests > 0);
   const totalTokens = totals.input_tokens + totals.output_tokens + totals.cache_tokens;
 
-  return <div className="space-y-5">
-    {usage?.unavailable ? <div className="border border-status-warning bg-bg-panel p-4 text-sm text-text-pg-muted rounded-xl">{zh ? "用量数据暂不可用。请确认网关已启用并使用已登录账户访问。" : "Usage data is unavailable. Confirm that the gateway is enabled and you are signed in."}</div> : null}
+  const stat = (value: string) => loading ? "…" : usage.unavailable ? "—" : value;
+  return <div role="region" aria-label={zh ? "Gateway 用量" : "Gateway usage"} className="min-w-0 space-y-5" aria-busy={loading}>
+    {usage?.unavailable ? <div role="alert" className="border border-status-warning bg-bg-panel p-4 text-sm text-text-pg-muted rounded-xl">{zh ? "用量数据暂不可用。请确认网关已启用并使用已登录账户访问。" : "Usage data is unavailable. Confirm that the gateway is enabled and you are signed in."}</div> : null}
 
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -154,50 +160,51 @@ export function UsagePanel({ locale, initialUsage }: Props) {
       </div>
       <div className="flex flex-wrap items-end gap-2">
         {presets.map((item) => <button key={item.id} type="button" disabled={loading} onClick={() => selectPreset(item.id)} className={`border px-3 py-1.5 text-sm disabled:opacity-50  rounded-lg ${preset === item.id ? "border-text-pg bg-text-pg font-semibold text-bg-panel" : "border-border-pg bg-bg-panel-muted"}`}>{item.label}</button>)}
-        <div className="flex items-end gap-2">
-          <label className="text-xs text-text-pg-muted">{zh ? "起" : "From"}<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="mt-1 block border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" /></label>
-          <label className="text-xs text-text-pg-muted">{zh ? "止" : "To"}<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="mt-1 block border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" /></label>
+        <div className="flex max-w-full flex-wrap items-end gap-2">
+          <label className="text-xs text-text-pg-muted">{zh ? "起" : "From"}<input type="date" aria-invalid={Boolean(rangeError)} aria-describedby="gateway-range-error" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className="mt-1 block border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" /></label>
+          <label className="text-xs text-text-pg-muted">{zh ? "止" : "To"}<input type="date" aria-invalid={Boolean(rangeError)} aria-describedby="gateway-range-error" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className="mt-1 block border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" /></label>
           <button type="button" disabled={loading || !customStart || !customEnd} onClick={applyCustom} className="border border-border-pg bg-bg-panel-muted px-3 py-1.5 text-sm disabled:opacity-50 rounded-lg">{zh ? "应用" : "Apply"}</button>
         </div>
-        <select value={modelFilter ?? ""} onChange={(event) => selectModel(event.target.value || null)} className="border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" aria-label="Filter by model">
+        <select value={modelFilter ?? ""} onChange={(event) => selectModel(event.target.value || null)} className="border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" aria-label={zh ? "按模型筛选" : "Filter by model"}>
           <option value="">{zh ? "全部模型" : "All models"}</option>
           {models.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
-        <select value={keyFilter ?? ""} onChange={(event) => selectKey(event.target.value || null)} className="border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" aria-label="Filter by API key">
+        <select value={keyFilter ?? ""} onChange={(event) => selectKey(event.target.value || null)} className="border border-border-pg bg-bg-panel-muted px-2 py-1.5 text-sm rounded-lg" aria-label={zh ? "按密钥筛选" : "Filter by API key"}>
           <option value="">{zh ? "全部密钥" : "All keys"}</option>
           {keys.map((key) => <option key={key.api_key_id} value={key.api_key_id}>{key.name || key.prefix || key.api_key_id}</option>)}
         </select>
       </div>
     </div>
 
-    {loading ? <div className="border border-border-pg bg-bg-panel p-4 text-sm text-text-pg-muted rounded-xl">{zh ? "加载中…" : "Loading…"}</div> : null}
+    <p id="gateway-range-error" role={rangeError ? "alert" : undefined} className="text-sm text-status-negative">{rangeError}</p>
+    {loading ? <div role="status" className="border border-border-pg bg-bg-panel p-4 text-sm text-text-pg-muted rounded-xl">{zh ? "加载中…" : "Loading…"}</div> : null}
 
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <MetricCard label={zh ? "总 Tokens" : "Total tokens"} value={num(totalTokens)} detail={zh ? "输入 + 输出 + 缓存" : "Input + output + cache"} tone="emerald" />
-      <MetricCard label={zh ? "输入 Tokens" : "Input tokens"} value={num(totals.input_tokens)} detail={`${totals.reasoning_tokens} ${zh ? "推理" : "reasoning"}`} tone="cyan" />
-      <MetricCard label={zh ? "输出 Tokens" : "Output tokens"} value={num(totals.output_tokens)} detail={zh ? "模型生成" : "Model-generated"} tone="cyan" />
-      <MetricCard label={zh ? "缓存 Tokens" : "Cache tokens"} value={num(totals.cache_tokens)} detail={zh ? "命中缓存输入" : "Cache-hit input"} tone="neutral" />
-      <MetricCard label={zh ? "请求数" : "Requests"} value={num(totals.requests)} detail={`${totals.success} ${zh ? "成功" : "ok"} · ${totals.errors} ${zh ? "错误" : "errors"}`} tone="amber" />
-      <MetricCard label={zh ? "消费" : "Spend"} value={money(totals.cost_usd)} detail={zh ? "按零售价计费" : "At retail pricing"} tone="emerald" />
-      <MetricCard label={zh ? "平均延迟" : "Avg latency"} value={`${num(Math.round(totals.avg_latency_ms))} ms`} detail={zh ? `峰值 ${totals.max_latency_ms} ms` : `Peak ${totals.max_latency_ms} ms`} tone="cyan" />
-      <MetricCard label={zh ? "错误数" : "Errors"} value={num(totals.errors)} detail={zh ? "非 200 响应" : "Non-200 responses"} tone={totals.errors > 0 ? "red" : "neutral"} />
+    <div className="grid grid-cols-2 gap-3 [&_.text-2xl]:break-words xl:grid-cols-4">
+      <MetricCard label={zh ? "总 Tokens" : "Total tokens"} value={stat(num(totalTokens))} detail={zh ? "输入 + 输出 + 缓存" : "Input + output + cache"} tone="emerald" />
+      <MetricCard label={zh ? "输入 Tokens" : "Input tokens"} value={stat(num(totals.input_tokens))} detail={`${stat(String(totals.reasoning_tokens))} ${zh ? "推理" : "reasoning"}`} tone="cyan" />
+      <MetricCard label={zh ? "输出 Tokens" : "Output tokens"} value={stat(num(totals.output_tokens))} detail={zh ? "模型生成" : "Model-generated"} tone="cyan" />
+      <MetricCard label={zh ? "缓存 Tokens" : "Cache tokens"} value={stat(num(totals.cache_tokens))} detail={zh ? "命中缓存输入" : "Cache-hit input"} tone="neutral" />
+      <MetricCard label={zh ? "请求数" : "Requests"} value={stat(num(totals.requests))} detail={`${stat(String(totals.success))} ${zh ? "成功" : "ok"} · ${stat(String(totals.errors))} ${zh ? "错误" : "errors"}`} tone="amber" />
+      <MetricCard label={zh ? "消费" : "Spend"} value={stat(money(totals.cost_usd))} detail={zh ? "按零售价计费" : "At retail pricing"} tone="emerald" />
+      <MetricCard label={zh ? "平均延迟" : "Avg latency"} value={stat(`${num(Math.round(totals.avg_latency_ms))} ms`)} detail={zh ? `峰值 ${stat(String(totals.max_latency_ms))} ms` : `Peak ${stat(String(totals.max_latency_ms))} ms`} tone="cyan" />
+      <MetricCard label={zh ? "错误数" : "Errors"} value={stat(num(totals.errors))} detail={zh ? "非 200 响应" : "Non-200 responses"} tone={totals.errors > 0 ? "red" : "neutral"} />
     </div>
 
     {!hasData && !loading && !usage?.unavailable ? <div className="mt-4"><EmptyState title={zh ? "该时间范围内暂无调用记录" : "No calls in this range"} description={zh ? "调整日期范围或先发起一次 API 调用。" : "Adjust the range or make an API call first."} /></div> : null}
 
-    {hasData ? <div className="grid gap-4 xl:grid-cols-2">
+    {hasData && !loading && !usage.unavailable ? <div className="grid gap-4 xl:grid-cols-2">
       <ResearchCard><h3 className="font-semibold">{zh ? "Tokens 时间序列" : "Tokens over time"}</h3><div className="h-56"><ResponsiveContainer width="100%" height="100%"><AreaChart data={tokenSeries}><CartesianGrid stroke={grid} vertical={false} /><XAxis dataKey="date" stroke={text} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} /><YAxis stroke={text} tickLine={false} axisLine={false} width={44} /><Tooltip content={<ChartTooltip />} /><Area type="monotone" dataKey="input" name={zh ? "输入" : "Input"} stackId="1" stroke={positive} fill={positiveFill} strokeWidth={2} /><Area type="monotone" dataKey="output" name={zh ? "输出" : "Output"} stackId="1" stroke={white} fill={whiteFill} strokeWidth={2} /><Area type="monotone" dataKey="cache" name={zh ? "缓存" : "Cache"} stackId="1" stroke={warning} fill={warningFill} strokeWidth={2} /></AreaChart></ResponsiveContainer></div></ResearchCard>
       <ResearchCard><h3 className="font-semibold">{zh ? "请求与错误" : "Requests and errors"}</h3><div className="h-56"><ResponsiveContainer width="100%" height="100%"><BarChart data={requestSeries}><CartesianGrid stroke={grid} vertical={false} /><XAxis dataKey="date" stroke={text} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} /><YAxis stroke={text} tickLine={false} axisLine={false} width={36} /><Tooltip content={<ChartTooltip />} /><Bar dataKey="success" name={zh ? "成功" : "Success"} fill={positive} radius={[6, 6, 0, 0]} /><Bar dataKey="errors" name={zh ? "错误" : "Errors"} fill={negative} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></ResearchCard>
       <ResearchCard><h3 className="font-semibold">{zh ? "消费金额" : "Spend"}</h3><div className="h-56"><ResponsiveContainer width="100%" height="100%"><AreaChart data={costSeries}><CartesianGrid stroke={grid} vertical={false} /><XAxis dataKey="date" stroke={text} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} /><YAxis stroke={text} tickLine={false} axisLine={false} width={44} /><Tooltip content={<UsageTooltip prefix="$" />} /><Area type="monotone" dataKey="cost" name="USD" stroke={warning} fill={warningFill} strokeWidth={2} /></AreaChart></ResponsiveContainer></div></ResearchCard>
       <ResearchCard><h3 className="font-semibold">{zh ? "平均延迟" : "Average latency"}</h3><div className="h-56"><ResponsiveContainer width="100%" height="100%"><LineChart data={latencySeries}><CartesianGrid stroke={grid} vertical={false} /><XAxis dataKey="date" stroke={text} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} /><YAxis stroke={text} tickLine={false} axisLine={false} width={44} /><Tooltip content={<UsageTooltip />} /><Line type="monotone" dataKey="latency" name="ms" stroke={positive} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div></ResearchCard>
     </div> : null}
 
-    {hasData ? <ResearchCard>
+    {hasData && !loading && !usage.unavailable ? <ResearchCard>
       <h3 className="font-semibold">{zh ? "按模型拆解" : "By model"}</h3>
       <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="text-left text-xs uppercase tracking-[0.1em] text-text-pg-muted"><tr><th className="pb-2">{zh ? "模型" : "Model"}</th><th>{zh ? "请求数" : "Requests"}</th><th>{zh ? "输入" : "Input"}</th><th>{zh ? "输出" : "Output"}</th><th>{zh ? "缓存" : "Cache"}</th><th>{zh ? "平均延迟" : "Avg latency"}</th><th>{zh ? "消费" : "Spend"}</th></tr></thead><tbody>{byModel.map((row: GatewayUsageBreakdownRow) => <tr key={row.model} className="border-t border-border-pg"><td className="py-3 font-medium">{row.model}</td><td>{num(row.requests)}</td><td>{num(row.input_tokens)}</td><td>{num(row.output_tokens)}</td><td>{num(row.cache_tokens)}</td><td>{num(Math.round(row.avg_latency_ms))} ms</td><td className="font-mono text-xs">{money(row.cost_usd)}</td></tr>)}</tbody></table></div>
     </ResearchCard> : null}
 
-    {hasData && byKey.length ? <ResearchCard>
+    {hasData && !loading && !usage.unavailable && byKey.length ? <ResearchCard>
       <h3 className="font-semibold">{zh ? "按密钥拆解" : "By API key"}</h3>
       <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="text-left text-xs uppercase tracking-[0.1em] text-text-pg-muted"><tr><th className="pb-2">{zh ? "密钥" : "Key"}</th><th>{zh ? "请求数" : "Requests"}</th><th>{zh ? "输入" : "Input"}</th><th>{zh ? "输出" : "Output"}</th><th>{zh ? "缓存" : "Cache"}</th><th>{zh ? "平均延迟" : "Avg latency"}</th><th>{zh ? "消费" : "Spend"}</th></tr></thead><tbody>{byKey.map((row: GatewayUsageBreakdownRow) => <tr key={row.api_key_id} className="border-t border-border-pg"><td className="py-3"><div className="font-medium">{row.name}</div><div className="font-mono text-xs text-text-pg-muted">{row.prefix}…</div></td><td>{num(row.requests)}</td><td>{num(row.input_tokens)}</td><td>{num(row.output_tokens)}</td><td>{num(row.cache_tokens)}</td><td>{num(Math.round(row.avg_latency_ms))} ms</td><td className="font-mono text-xs">{money(row.cost_usd)}</td></tr>)}</tbody></table></div>
     </ResearchCard> : null}

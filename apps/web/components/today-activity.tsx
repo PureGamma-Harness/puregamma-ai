@@ -32,15 +32,27 @@ const ZONES: Zone[] = [
 export function TodayActivity({ locale }: { locale: Locale }) {
   const zh = locale === "zh";
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
+  const [activityState, setActivityState] = useState<"loading" | "available" | "unavailable">("loading");
+  const [activityAttempt, setActivityAttempt] = useState(0);
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot | null>(null);
+  const [portfolioLoaded, setPortfolioLoaded] = useState(false);
   const [liveTrading, setLiveTrading] = useState<boolean | "unknown" | null>(null);
   const researchGate = useCapabilityGate(() => getResearchRuns(5, 0), []);
   const [recentRuns, setRecentRuns] = useState<HarnessResearchRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    getAgentConversations().then((payload: { conversations: AgentConversation[] }) => { if (!cancelled) setConversations(payload.conversations.slice(0, 4)); }).catch(() => undefined);
-    getPortfolioSnapshot(locale).then((payload: PortfolioSnapshot) => { if (!cancelled) setPortfolio(payload); }).catch(() => undefined);
+    setActivityState("loading");
+    getAgentConversations().then((payload: { conversations: AgentConversation[] }) => {
+      if (!cancelled) { setConversations(payload.conversations.slice(0, 4)); setActivityState("available"); }
+    }).catch(() => { if (!cancelled) setActivityState("unavailable"); });
+    return () => { cancelled = true; };
+  }, [locale, activityAttempt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPortfolioLoaded(false); setPortfolio(null);
+    getPortfolioSnapshot(locale).then((payload: PortfolioSnapshot) => { if (!cancelled) { setPortfolio(payload); setPortfolioLoaded(true); } }).catch(() => { if (!cancelled) setPortfolioLoaded(true); });
     getGlobalMarket(locale).then((payload) => { if (!cancelled) setLiveTrading(payload.unavailable ? "unknown" : Boolean(payload.live_trading)); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [locale]);
@@ -52,8 +64,9 @@ export function TodayActivity({ locale }: { locale: Locale }) {
     return () => { cancelled = true; };
   }, [researchGate.state.status]);
 
-  const nav = (portfolio?.nav ?? 0) >= 0 ? (portfolio?.nav ?? 0) : 0;
-  const portfolioStale = Boolean(portfolio?.stale);
+  const portfolioUnavailable = portfolioLoaded && (!portfolio || Boolean(portfolio.unavailable));
+  const nav = portfolioLoaded && portfolio && !portfolio.unavailable && portfolio.connected && Number.isFinite(portfolio.nav) ? portfolio.nav : null;
+  const portfolioStale = !portfolioUnavailable && Boolean(portfolio?.stale);
 
   return (
     <div className="chrono-decision-stream" data-chrono-slice>
@@ -73,7 +86,7 @@ export function TodayActivity({ locale }: { locale: Locale }) {
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold"><Bot className="h-4 w-4 text-ocean-cyan" aria-hidden />{zh ? "Agent 动态" : "Agent Activity"}</h2>
             <Link href={withLocale(locale, "/chat")} className="inline-flex items-center gap-1 text-xs text-text-pg-muted hover:text-text-pg">{zh ? "继续对话" : "Continue"}<ArrowRight className="h-3 w-3" aria-hidden /></Link>
           </div>
-          {conversations.length === 0 ? (
+          {activityState === "loading" ? <p role="status" className="text-sm text-text-pg-muted">{zh ? "正在读取 Agent 动态…" : "Loading Agent activity…"}</p> : activityState === "unavailable" ? <div role="alert" className="text-sm text-text-pg-muted"><p>{zh ? "Agent 动态暂不可用。" : "Agent activity is unavailable."}</p><button type="button" onClick={() => setActivityAttempt((attempt) => attempt + 1)} className="mt-3 min-h-11 rounded-lg border border-border-pg px-3 py-2 text-sm">{zh ? "重试 Agent 动态" : "Retry Agent activity"}</button></div> : conversations.length === 0 ? (
             <p className="text-sm text-text-pg-muted">{zh ? "还没有 Agent 会话。开始一次对话，研究问题、策略或风险。" : "No Agent conversations yet. Start one to research a question, strategy, or risk."}</p>
           ) : (
             <ul className="space-y-2">
@@ -121,7 +134,7 @@ export function TodayActivity({ locale }: { locale: Locale }) {
             <Link href={withLocale(locale, "/portfolio")} className="inline-flex items-center gap-1 text-xs text-text-pg-muted hover:text-text-pg">{zh ? "详情" : "Details"}<ArrowRight className="h-3 w-3" aria-hidden /></Link>
           </div>
           <div className="tabular-nums">
-            <div className="text-2xl font-semibold text-text-pg">${nav.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div data-testid="dashboard-portfolio-snapshot" className="text-2xl font-semibold text-text-pg">{nav === null ? "—" : `$${nav.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</div>
             <div className="mt-1 text-xs text-text-pg-muted">
               {zh ? "净值 (NAV)" : "Net asset value"}
               {portfolio?.data_as_of ? <> · {zh ? "更新于" : "as of"} {formatTime(portfolio.data_as_of, locale)}</> : null}
@@ -130,12 +143,12 @@ export function TodayActivity({ locale }: { locale: Locale }) {
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {liveTrading === "unknown" ? <StatusBadge domain="data" value="unknown" locale={locale} /> : liveTrading === null ? null : <StatusBadge domain="trading" value={liveTrading ? "LIVE" : "LIVE_DISABLED"} locale={locale} />}
             {portfolioStale ? <StatusBadge domain="data" value="stale" locale={locale} /> : null}
-            {!portfolioStale && portfolio?.connected ? <StatusBadge domain="data" value="fresh" locale={locale} /> : null}
+            {!portfolioUnavailable && !portfolioStale && portfolio?.connected ? <StatusBadge domain="data" value="fresh" locale={locale} /> : null}
           </div>
           {portfolioStale ? (
             <p className="mt-2 text-xs leading-5 text-status-warning">{zh ? "数据已过期：NAV 可能未反映最新市场价格。请在组合页同步账户。" : "Data is stale: NAV may not reflect the latest market prices. Sync your account on the Portfolio page."}</p>
           ) : null}
-          {!portfolio?.connected ? <p className="mt-2 text-xs leading-5 text-text-pg-muted">{zh ? "尚未连接任何投资账户。" : "No investment account connected yet."}</p> : null}
+          {!portfolioLoaded ? <p className="mt-2 text-xs text-text-pg-muted">{zh ? "正在读取组合…" : "Loading portfolio…"}</p> : portfolioUnavailable ? <p className="mt-2 text-xs leading-5 text-status-warning">{zh ? "组合数据暂不可用，请在组合页重试。" : "Portfolio data is unavailable. Retry on the Portfolio page."}</p> : !portfolio?.connected ? <p className="mt-2 text-xs leading-5 text-text-pg-muted">{zh ? "尚未连接任何投资账户。" : "No investment account connected yet."}</p> : null}
         </section>
       </div>
     </div>
