@@ -80,7 +80,9 @@ export function TodayActivity({ locale }: { locale: Locale }) {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.9fr]">
+      {/* Explicit zero-minimum tracks let long activity titles shrink inside
+          their cards instead of widening the entire dashboard. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <section className="terminal-panel">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold"><Bot className="h-4 w-4 text-ocean-cyan" aria-hidden />{zh ? "Agent 动态" : "Agent Activity"}</h2>

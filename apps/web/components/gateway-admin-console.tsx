@@ -186,7 +186,7 @@ function AdminUsageCharts({ locale }: { locale: Locale }) {
               {item.label}
             </button>
           ))}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 }}>
             <label style={{ fontSize: 12, color: dsw.inkMuted }}>{zh ? "起" : "From"}
               <input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)}
                 style={{ display: "block", marginTop: 4, border: `1px solid ${dsw.line}`, background: dsw.cardBg, padding: "5px 8px", fontSize: 13, borderRadius: 8 }} />
@@ -222,7 +222,7 @@ function AdminUsageCharts({ locale }: { locale: Locale }) {
       {!hasData && !loading ? <div style={{ border: `1px dashed ${dsw.line}`, background: dsw.panelBg, padding: "28px 16px", textAlign: "center", fontSize: 13, color: dsw.inkMuted, borderRadius: 12 }}>{zh ? "该时间范围内暂无调用记录。" : "No calls in this range."}</div> : null}
 
       {hasData ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 14 }}>
           <DswCard title={zh ? "Tokens 时间序列" : "Tokens over time"}>
             <div style={{ height: 220 }}><ResponsiveContainer width="100%" height="100%">
               <AreaChart data={tokenSeries}>
@@ -386,7 +386,7 @@ export function GatewayAdminConsole({ locale }: { locale: Locale }) {
 
       <AdminUsageCharts locale={locale} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 14 }}>
         <DswCard title={zh ? "Provider 状态" : "Provider status"}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {providers.map((provider) => <div key={provider.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, border: `1px solid ${dsw.line}`, background: dsw.panelBg, padding: "10px 12px", fontSize: 13, borderRadius: 10 }}>

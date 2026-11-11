@@ -1,15 +1,17 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test, SESSION } from "./auth-onboarding-fixtures";
 
 const user = { id: "offline-onboarding", email: "reader@example.invalid", name: "Offline Reader", role: "user", plan: "Pro", credit_balance: 0 };
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNXsAAAAASUVORK5CYII=";
 type Scenario = { saves: Record<string, unknown>[]; saveFailures: number[]; puzzleFails: boolean; googleTargets: string[]; errors: string[] };
 
 const scenarios = new WeakMap<Page, Scenario>();
-test.beforeEach(async ({ page, context, baseURL }) => {
+test.beforeEach(async ({ page, context, baseURL, onboardingBackend }) => {
   const state: Scenario = { saves: [], saveFailures: [], puzzleFails: false, googleTargets: [], errors: [] };
   scenarios.set(page, state);
   page.on("pageerror", (error) => state.errors.push(error.message));
-  await context.addCookies([{ name: "pg_session", value: "offline-mvp-auth", url: baseURL! }]);
+  await context.addCookies([{ name: "pg_session", value: SESSION, url: baseURL! }]);
+  await page.setExtraHTTPHeaders({ "x-forwarded-host": onboardingBackend.authority, "x-forwarded-proto": "http" });
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== baseURL) return route.abort();
@@ -36,8 +38,9 @@ test.beforeEach(async ({ page, context, baseURL }) => {
   await page.routeWebSocket("**/*", (socket) => socket.close());
 });
 
-test.afterEach(async ({ page }) => {
+test.afterEach(async ({ page, onboardingBackend }) => {
   expect(scenarios.get(page)?.errors).toEqual([]);
+  expect(onboardingBackend.requests.filter((request) => request.method !== "GET" || !request.session)).toEqual([]);
 });
 
 test("authentication fields keep labels and localized password visibility", async ({ page }, info) => {
@@ -129,6 +132,7 @@ test("storage denial preserves in-tab choices and server success still navigates
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await page.getByRole("button", { name: "完成设置", exact: true }).click();
   await expect(page).toHaveURL(/\/zh\/dashboard$/);
+  await expect(page.getByRole("main").getByRole("navigation", { name: "研究工作流程", exact: true })).toBeVisible();
   expect(scenarios.get(page)!.saves).toHaveLength(1);
   expect(scenarios.get(page)!.saves[0]).toMatchObject({ preferred_assets: ["HYPE"], preferred_style: "momentum", notification_channels: ["email"] });
 });
@@ -149,6 +153,7 @@ test("save failure retains recipients for retry and never claims an authenticati
   await expect(page.getByRole("textbox", { name: /Email/ })).toHaveCount(0);
   await submit.click();
   await expect(page).toHaveURL(/\/en\/dashboard$/);
+  await expect(page.getByRole("main").getByRole("navigation", { name: "Research workflows", exact: true })).toBeVisible();
   expect(state.saves).toHaveLength(2);
   expect(state.saves[1]).toMatchObject({ notification_channels: ["email", "telegram"], telegram_chat_id: "@offline-reader" });
 });
@@ -169,6 +174,24 @@ test("OAuth return destinations reject backslash and control-character escapes",
     await expect(page.getByRole("alert").filter({ hasText: /Google/ })).toBeVisible();
   }
   expect(state.googleTargets).toEqual(["/en/chat", "/en/chat"]);
+});
+
+test("@http dashboard destination uses owned server reads and renders unavailable data honestly", async ({ request, onboardingBackend }) => {
+  for (const locale of ["en", "zh"]) {
+    const start = onboardingBackend.requests.length;
+    const response = await request.get(`/${locale}/dashboard`, {
+      headers: { Cookie: `pg_session=${SESSION}`, "x-forwarded-host": onboardingBackend.authority, "x-forwarded-proto": "http" },
+    });
+    expect(response.status()).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(locale === "zh" ? 'aria-label="研究工作流程"' : 'aria-label="Research workflows"');
+    expect(onboardingBackend.requests.slice(start).sort((left, right) => left.path.localeCompare(right.path))).toEqual([
+      { method: "GET", path: "/api/billing/subscription", session: true, status: 501 },
+      { method: "GET", path: "/api/market/snapshot", session: true, status: 501 },
+      { method: "GET", path: "/api/reports", session: true, status: 501 },
+    ]);
+    expect(html).toContain(locale === "zh" ? "账户与计费数据暂不可用" : "Account and billing data unavailable");
+  }
 });
 
 
