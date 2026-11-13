@@ -161,7 +161,7 @@ test("owned detail fixtures do not turn missing IDs into successful content", as
     await expect(main.locator('[aria-busy="true"]')).toHaveCount(0);
     const feedback = route.startsWith("/en/chat/")
       ? main.getByTestId("chat-error")
-      : main.getByRole("status").filter({ hasText: "Harness Research not available yet" });
+      : main.getByRole("status").filter({ hasText: "Research is not available yet" });
     await expect(feedback, "a missing owned ID must produce visible, explicit recovery feedback").toBeVisible();
     await expect(feedback).not.toBeEmpty();
     await expect(main).not.toContainText(genericFailure);

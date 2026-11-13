@@ -50,8 +50,8 @@ jobs:
       - run: pnpm test:dependency-compat
       - run: pnpm test:runtime-security
       - run: node --test tests/offline-fetch-guard.test.cjs
-      - name: Verify product context and appearance contracts
-        run: node --test tests/appearance-preferences.test.cjs tests/auth-onboarding-compat.test.cjs tests/plotly-chart-data.test.cjs tests/data-source-status.test.cjs tests/legacy-query-preservation.test.cjs tests/route-recovery.test.cjs
+      - name: Verify product context, appearance, and session ownership
+        run: node --test tests/appearance-preferences.test.cjs tests/auth-onboarding-compat.test.cjs tests/plotly-chart-data.test.cjs tests/data-source-status.test.cjs tests/legacy-query-preservation.test.cjs tests/route-recovery.test.cjs tests/session-ownership.test.cjs
       - run: pnpm build
       - name: Verify the standalone runtime's actual image library
         run: |
@@ -84,6 +84,16 @@ jobs:
         env:
           PG_ROUTE_MODE: full
         run: pnpm exec playwright test --config playwright.routes.config.ts
+      - name: Verify product experience and keyboard journeys
+        run: pnpm exec playwright test --config playwright.worldclass.config.ts --output=test-results/worldclass
+      - name: Preserve product experience evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-product-experience
+          path: apps/web/test-results/worldclass/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Preserve browser failure traces
         if: failure()
         uses: actions/upload-artifact@v4

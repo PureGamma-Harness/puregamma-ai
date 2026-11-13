@@ -272,8 +272,8 @@ export function getXConfig(locale: Locale = defaultLocale) {
   return api<XConfig>("/auth/x/status", { fallback: { x_login_enabled: false, x_bot_enabled: false, x_bound: false }, locale });
 }
 
-export async function getMe() {
-  return requestStrict<{ user: AuthResponse["user"] }>("/me");
+export async function getMe(signal?: AbortSignal) {
+  return requestStrict<{ user: AuthResponse["user"] }>("/me", { signal });
 }
 
 export async function logout() {
@@ -1378,6 +1378,7 @@ async function requestStrict<T>(path: string, init: RequestInit = {}): Promise<T
     cache: "no-store",
     headers: { "Content-Type": "application/json", ...sessionHeaders, ...(init.headers || {}) }
   });
+  init.signal?.throwIfAborted();
   if (!response.ok) {
     if (response.status === 401) notifyAuthExpired();
     if (response.status === 402) redirectIfInsufficientCredits();
@@ -1387,6 +1388,7 @@ async function requestStrict<T>(path: string, init: RequestInit = {}): Promise<T
     throw error;
   }
   const payload = await response.json() as T;
+  init.signal?.throwIfAborted();
   syncUserStateFromPayload(payload);
   return payload;
 }

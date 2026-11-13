@@ -60,7 +60,7 @@ export type IntegrationRow = {
 
 export function PGResearchCard({ children, className = "", ...props }: HTMLAttributes<HTMLElement> & { children: ReactNode; className?: string }) {
   return (
-    <section className={clsx("min-w-0 border border-border-pg bg-bg-panel p-4 text-text-pg transition hover:border-border-pg-strong rounded-xl", className)} {...props}>
+    <section className={clsx("pg-card", className)} {...props}>
       {children}
     </section>
   );
@@ -85,17 +85,17 @@ export function PageHeader({
 }) {
   const body = description || subtitle;
   return (
-    <div className="mb-8 border-b border-border-pg pb-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="max-w-4xl">
-          <div className="mb-3 flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-text-pg-muted">
+    <div className="pg-page-header">
+      <div className="pg-page-header-row">
+        <div className="pg-page-copy">
+          <div className="pg-page-eyebrow">
             {sectionNumber ? <span className="text-text-pg">{sectionNumber}</span> : null}
             <span>{eyebrow}</span>
           </div>
-          <h1 className="max-w-5xl text-2xl font-semibold tracking-normal text-text-pg">{title}</h1>
-          {body ? <p className="mt-4 max-w-3xl text-sm leading-6 text-text-pg-muted">{body}</p> : null}
+          <h1 className="pg-page-title">{title}</h1>
+          {body ? <p className="pg-page-description">{body}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+        {actions ? <div className="pg-page-actions">{actions}</div> : null}
       </div>
     </div>
   );
@@ -124,25 +124,25 @@ export function MetricCard({
   return (
     <PGResearchCard>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-pg-muted">{label}</span>
+        <span className="text-xs font-medium text-text-pg-muted">{label}</span>
         <span className={toneClass(displayTone)}>{icon || <StatusDot tone={displayTone} />}</span>
       </div>
-      <div className="mt-4 flex items-end gap-3">
-        <div className="text-2xl font-semibold text-text-pg">{value}</div>
+      <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
+        <div className="min-w-0 max-w-full text-[1.75rem] font-semibold leading-tight tabular-nums tracking-tight text-text-pg [overflow-wrap:anywhere]">{value}</div>
         {delta ? <div className={clsx("pb-1 text-xs", toneClass(displayTone))}>{delta}</div> : null}
       </div>
-      {detail ? <p className="mt-2 text-sm text-text-pg-muted">{detail}</p> : null}
-      {footnote ? <p className="mt-3 border-t border-border-pg pt-2 text-xs text-text-pg-dim">{footnote}</p> : null}
+      {detail ? <p className="mt-2 text-sm leading-6 text-text-pg-muted">{detail}</p> : null}
+      {footnote ? <p className="pg-metadata mt-3 border-t border-border-pg pt-3">{footnote}</p> : null}
     </PGResearchCard>
   );
 }
 
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
-  return <span className={clsx("inline-flex items-center gap-1 border px-2 py-0.5 text-xs font-medium rounded-lg", badgeClass(tone))}>{children}</span>;
+  return <span className={clsx("pg-badge", badgeClass(tone))}>{children}</span>;
 }
 
 export function StatusDot({ tone = "neutral" }: { tone?: Tone }) {
-  return <span className={clsx("inline-block h-1.5 w-1.5 rounded-full", dotClass(tone))} />;
+  return <span aria-hidden className={clsx("inline-block h-1.5 w-1.5 rounded-full", dotClass(tone))} />;
 }
 
 export function StatCell({ label, value, dim = false }: { label: string; value: string; dim?: boolean }) {
@@ -191,10 +191,10 @@ export function CreditCostBadge({ cost, locale = defaultLocale }: { cost: number
 type PlanIdentity = "silver" | "gold" | "black-gold" | "prestige";
 
 const planIdentityStyles: Record<PlanIdentity, string> = {
-  silver: "border-[var(--muted-2)] bg-[var(--muted-2)]/10 text-[var(--muted)]",
-  gold: "border-[var(--warning)] bg-[var(--warning)]/10 text-[var(--warning)]",
-  "black-gold": "border-[var(--warning)] bg-[var(--panel-strong)] text-[var(--warning)]",
-  prestige: "border-[var(--info)] bg-[var(--info)]/10 text-[var(--info)]",
+  silver: "bg-bg-panel-muted text-text-pg-muted",
+  gold: "bg-[var(--pg-warning-soft)] text-status-warning",
+  "black-gold": "bg-[var(--pg-surface-3)] text-status-warning",
+  prestige: "bg-[var(--pg-info-soft)] text-text-pg",
 };
 
 function planIdentity(plan: string): PlanIdentity {
@@ -230,7 +230,7 @@ export function PlanBadge({ plan, tier, locale = defaultLocale }: { plan: string
     ? { silver: "白银", gold: "黄金", "black-gold": "黑金", prestige: "尊贵" }
     : { silver: "Silver", gold: "Gold", "black-gold": "Black Gold", prestige: "Prestige" };
   return (
-    <span title={`${plan} · ${labels[identity]}`} className={clsx("inline-flex items-center gap-1.5 border px-2 py-0.5 text-xs font-semibold rounded-lg", planIdentityStyles[identity])}>
+    <span title={`${plan} · ${labels[identity]}`} className={clsx("pg-badge", planIdentityStyles[identity])}>
       <PlanIdentityIcon identity={identity} />
       <span>{plan}</span>
       <span className="font-normal opacity-75">· {labels[identity]}</span>
@@ -421,33 +421,33 @@ export function ProcessStepper({ steps }: { steps: { label: string; detail: stri
  * heading, list, quote, table or code styling. See `components/markdown.tsx`.
  */
 export function ReportMarkdown({ content }: { content: string; locale?: Locale }) {
-  return <MarkdownContent content={content} />;
+  return <MarkdownContent content={content} headingBaseLevel={2} />;
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
-  return <div className="border border-dashed border-border-pg bg-bg-panel p-8 text-center rounded-2xl"><Clock className="mx-auto h-6 w-6 text-text-pg-muted" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm text-text-pg-muted">{description}</p></div>;
+  return <div className="pg-empty-state"><Clock aria-hidden className="mx-auto h-6 w-6 text-text-pg-muted" /><h3 className="mt-4 font-semibold">{title}</h3><p className="mx-auto mt-2 max-w-[56ch] text-sm leading-6 text-text-pg-muted">{description}</p></div>;
 }
 
 export function LoadingSkeleton() {
-  return <div className="animate-pulse space-y-3"><div className="h-5 w-1/3 bg-bg-panel-muted" /><div className="h-32 border border-border-pg bg-bg-panel-muted rounded-xl" /><div className="h-32 border border-border-pg bg-bg-panel-muted rounded-xl" /></div>;
+  return <div className="space-y-4 motion-safe:animate-pulse"><div className="h-5 w-1/3 rounded-md bg-bg-panel-muted" /><div className="h-32 rounded-xl border border-border-pg bg-bg-panel-muted" /><div className="h-32 rounded-xl border border-border-pg bg-bg-panel-muted" /></div>;
 }
 
 export function ErrorState({ title, description }: { title: string; description: string }) {
-  return <div className="border border-border-pg-strong bg-bg-panel p-4 rounded-xl"><div className="flex gap-2 text-status-negative"><ShieldAlert className="h-5 w-5" /><strong>{title}</strong></div><p className="mt-2 text-sm text-text-pg-muted">{description}</p></div>;
+  return <div className="pg-error-state"><div className="flex items-center gap-2 text-status-negative"><ShieldAlert aria-hidden className="h-5 w-5 shrink-0" /><strong className="text-sm font-semibold">{title}</strong></div><p className="mt-2 max-w-[68ch] text-sm leading-6 text-text-pg-muted">{description}</p></div>;
 }
 
 export function ActionLink({ href, children }: { href: string; children: ReactNode }) {
-  return <Link href={href} className="inline-flex items-center border border-border-pg px-3 py-2 text-sm font-medium hover:border-border-pg-strong hover:bg-bg-panel-muted rounded-lg">{children}</Link>;
+  return <Link href={href} className="pg-button pg-button-secondary">{children}</Link>;
 }
 
 function badgeClass(tone: Tone) {
   return {
-    neutral: "border-border-pg bg-bg-panel-muted text-text-pg-muted",
-    info: "border-border-pg-strong bg-bg-panel text-text-pg",
-    cyan: "border-border-pg-strong bg-bg-panel text-text-pg",
-    emerald: "border-border-pg bg-bg-panel text-status-positive",
-    amber: "border-border-pg bg-bg-panel text-status-warning",
-    red: "border-border-pg bg-bg-panel text-status-negative"
+    neutral: "bg-bg-panel-muted text-text-pg-muted",
+    info: "bg-[var(--pg-info-soft)] text-text-pg",
+    cyan: "bg-[var(--pg-info-soft)] text-text-pg",
+    emerald: "bg-[var(--pg-positive-soft)] text-status-positive",
+    amber: "bg-[var(--pg-warning-soft)] text-status-warning",
+    red: "bg-[var(--pg-danger-soft)] text-status-negative"
   }[tone];
 }
 

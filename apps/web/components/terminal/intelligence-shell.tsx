@@ -3,8 +3,8 @@ import { Display, DisplayEyebrow } from "@/components/terminal/editorial";
 
 /**
  * Shared intelligence-workspace frame (Chat / Research / Secretary).
- * A modern product header — eyebrow, tight display title, one byline —
- * then the working surface. No decorative rules, no card chrome.
+ * One restrained workspace header followed by the working surface. Domain
+ * routes that own their own h1 render that header instead of nesting this one.
  *
  * `compact` shrinks that header for surfaces whose working area must fit the
  * viewport. Chat passes it: at 1440x900 the full-height header pushed the
@@ -21,22 +21,22 @@ export function IntelligenceShell({ eyebrow, title, children, byline, compact = 
 }) {
   if (compact) {
     return (
-      <div className="intelligence-shell mx-auto w-full max-w-[1180px]">
-        <header className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div className="intelligence-shell">
+        <header className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-2">
           <DisplayEyebrow>{eyebrow}</DisplayEyebrow>
-          <Display as="h1" size="md" className="!text-[1.05rem] leading-6">{title}</Display>
-          {byline ? <p className="hidden text-xs leading-5 text-muted md:block">{byline}</p> : null}
+          <Display as="h1" size="md" className="pg-page-title">{title}</Display>
+          {byline ? <p className="pg-metadata hidden md:block">{byline}</p> : null}
         </header>
         {children}
       </div>
     );
   }
   return (
-    <div className={compact ? "intelligence-shell mx-auto w-full max-w-[1180px]" : "intelligence-shell"}>
-      <header className="mb-8">
+    <div className="intelligence-shell">
+      <header className="pg-page-header">
         <DisplayEyebrow>{eyebrow}</DisplayEyebrow>
-        <Display as="h1" size="lg" className="mt-3">{title}</Display>
-        {byline ? <p className="mt-3 max-w-2xl text-[0.92rem] leading-7 text-muted">{byline}</p> : null}
+        <Display as="h1" size="lg" className="pg-page-title mt-2">{title}</Display>
+        {byline ? <p className="pg-page-description">{byline}</p> : null}
       </header>
       {children}
     </div>

@@ -11,6 +11,18 @@ export type SessionUserState = {
 
 export const USER_STATE_EVENT = "puregamma:user-state";
 
+// Keep provenance separate from detail: existing listeners and persisted user
+// shape stay unchanged, while a quota update cannot authenticate cached fields.
+const userStateEvents = new WeakMap<Event, { identity: boolean; update: SessionUserState }>();
+
+export function isIdentityUserStateEvent(event: Event): boolean {
+  return userStateEvents.get(event)?.identity === true;
+}
+
+export function getUserStateUpdate(event: Event): SessionUserState | null {
+  return userStateEvents.get(event)?.update || null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -33,7 +45,12 @@ export function publishUserState(update: SessionUserState, replace = false): voi
   } catch {
     // A blocked storage backend must not prevent live UI updates.
   }
-  window.dispatchEvent(new CustomEvent<SessionUserState>(USER_STATE_EVENT, { detail: next }));
+  const event = new CustomEvent<SessionUserState>(USER_STATE_EVENT, { detail: next });
+  userStateEvents.set(event, {
+    identity: replace && typeof update.id === "string" && Boolean(update.id.trim()),
+    update: { ...update },
+  });
+  window.dispatchEvent(event);
 }
 
 export function publishCreditBalance(balance: number): void {

@@ -1,8 +1,8 @@
 ﻿import type { ReactNode } from "react";
 
-/** Editorial primitives for the Intelligence Terminal: a tight modern
- * display, a tracked section label, hairline rules and a quiet panel. These are
- * deliberately plain (no client hooks) so they work in any surface tier. */
+/** Shared workspace type, quiet section labels and opaque data panels.
+ * These are deliberately plain (no client hooks) and use the same foundation
+ * across every appearance and surface tier. */
 
 export function Display({ children, as: Tag = "h1", size: s = "md", className = "" }: { children: ReactNode; as?: "h1" | "h2" | "h3" | "p"; size?: "sm" | "md" | "lg" | "xl"; className?: string }) {
   const sizeClass = s === "xl" ? "display-xl" : s === "lg" ? "display-lg" : s === "sm" ? "display-sm" : "display-md";
@@ -22,5 +22,5 @@ export function Rule({ className = "" }: { className?: string }) {
 }
 
 export function TerminalPanel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={"terminal-panel " + className}>{children}</section>;
+  return <section className={"terminal-panel min-w-0 " + className}>{children}</section>;
 }

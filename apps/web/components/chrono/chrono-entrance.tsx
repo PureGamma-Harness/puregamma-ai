@@ -5,9 +5,8 @@ import { gsap, useGSAP } from "@/components/chrono/motion";
 import { resolveChronoTier, useChronoTierReactive, useHtmlDataset } from "@/lib/chrono";
 
 /**
- * Above-the-fold "stage" sequence for an exploration hero: a weighted, non-
- * bouncy timeline that reveals each `[data-chrono-enter]` descendant in DOM
- * order (environment light field -> time core -> core data -> secondary).
+ * A brief positional settle for noninteractive heading content. Inputs and
+ * actions stay visible and usable instead of waiting for a staged reveal.
  *
  * Runs only in Glass + allowed-motion desktop. Otherwise it is a no-op and
  * content is fully visible. Cleanup is automatic through the useGSAP context
@@ -22,13 +21,10 @@ export function ChronoEntrance({ children, className = "" }: { children: ReactNo
     // Reactive hooks begin with hydration-safe defaults. Consult the actual
     // document and device before hiding any server-rendered content.
     if (document.documentElement.dataset.visualStyle !== "glass" || resolveChronoTier() === "static" || !rootRef.current) return;
-    const els = gsap.utils.toArray<HTMLElement>(rootRef.current.querySelectorAll("[data-chrono-enter]"));
+    const els = gsap.utils.toArray<HTMLElement>(rootRef.current.querySelectorAll("[data-chrono-enter]"))
+      .filter((el) => !el.matches("input, button, textarea, a, [tabindex]") && !el.querySelector("input, button, textarea, a, [tabindex]"));
     if (!els.length) return;
-    gsap.set(els, { opacity: 0, y: 26 });
-    const tl = gsap.timeline({ defaults: { ease: "power2.out", duration: 0.65 } });
-    els.forEach((el, index) => {
-      tl.to(el, { opacity: 1, y: 0 }, index === 0 ? 0 : "+=0.14");
-    });
+    gsap.fromTo(els, { y: 6 }, { y: 0, duration: 0.26, stagger: 0.035, ease: "power2.out" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, { scope: rootRef, dependencies: [tier, style], revertOnUpdate: true });
 

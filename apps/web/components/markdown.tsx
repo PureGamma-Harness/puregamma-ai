@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { createElement, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
+import { useLocale } from "@/components/i18n/LocaleProvider";
 
 /** Every element override receives the same shape from react-markdown. */
 type MdProps = { children?: ReactNode; className?: string; href?: string; src?: string; alt?: string };
@@ -36,6 +37,7 @@ type MdProps = { children?: ReactNode; className?: string; href?: string; src?: 
 /** A fenced code block with a language label and a copy control. */
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const [copied, setCopied] = useState(false);
+  const zh = useLocale() === "zh";
 
   const copy = async () => {
     try {
@@ -54,11 +56,11 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         <button
           type="button"
           onClick={() => void copy()}
-          aria-label={copied ? "Copied" : "Copy code"}
-          className="inline-flex min-h-7 items-center gap-1 px-1.5 text-[10px] text-text-pg-dim transition hover:text-text-pg rounded focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
+          aria-label={copied ? (zh ? "已复制" : "Copied") : (zh ? "复制代码" : "Copy code")}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 px-2 text-xs text-text-pg-muted transition hover:text-text-pg rounded focus-visible:ring-2 focus-visible:ring-accent-ring focus-visible:outline-none"
         >
           {copied ? <Check className="h-3 w-3 text-status-positive" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? (zh ? "已复制" : "Copied") : (zh ? "复制" : "Copy")}
         </button>
       </div>
       <pre className="touch-pan-x overflow-x-auto overscroll-x-contain p-3 text-[13px] leading-[20px]">
@@ -74,24 +76,41 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
  * Element styling lives here rather than in a stylesheet so that the mapping is
  * visible next to the component tree; every value is a semantic token utility.
  */
-export function MarkdownContent({ content }: { content: string }) {
+type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+type MarkdownProps = { content: string; headingBaseLevel?: HeadingLevel };
+const headingClasses: Record<HeadingLevel, string> = {
+  1: "mt-7 mb-4 text-2xl font-semibold leading-8 first:mt-0",
+  2: "mt-7 mb-3 text-xl font-semibold leading-7 first:mt-0",
+  3: "mt-6 mb-3 text-lg font-semibold leading-7 first:mt-0",
+  4: "mt-5 mb-2 text-base font-semibold leading-6 first:mt-0",
+  5: "mt-5 mb-2 text-sm font-semibold leading-6 first:mt-0",
+  6: "mt-4 mb-2 text-sm font-medium leading-6 first:mt-0",
+};
+
+export function MarkdownContent({ content, headingBaseLevel = 1 }: MarkdownProps) {
+  // Embedded documents preserve their relative outline without taking over the
+  // workspace's h1. The standalone renderer keeps its original heading base.
+  const heading = (sourceLevel: HeadingLevel) => function Heading({ children }: MdProps) {
+    const level = Math.min(6, headingBaseLevel + sourceLevel - 1) as HeadingLevel;
+    return createElement(`h${level}`, { className: `${headingClasses[level]} text-text-pg` }, children);
+  };
   return (
-    <div className="pg-markdown max-w-none break-words text-[14px] leading-[22px] text-text-pg">
+    <div className="pg-markdown max-w-none break-words text-[15px] leading-[26px] text-text-pg">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: ({ children }: MdProps) => <h1 className="mt-6 mb-3 text-[24px] font-medium leading-[32px] text-text-pg first:mt-0">{children}</h1>,
-          h2: ({ children }: MdProps) => <h2 className="mt-6 mb-3 text-[20px] font-medium leading-[28px] text-text-pg first:mt-0">{children}</h2>,
-          h3: ({ children }: MdProps) => <h3 className="mt-5 mb-2 text-[18px] font-medium leading-[26px] text-text-pg first:mt-0">{children}</h3>,
-          h4: ({ children }: MdProps) => <h4 className="mt-4 mb-2 text-[16px] font-medium leading-[24px] text-text-pg first:mt-0">{children}</h4>,
-          h5: ({ children }: MdProps) => <h5 className="mt-4 mb-1 text-[14px] font-medium leading-[22px] text-text-pg first:mt-0">{children}</h5>,
-          h6: ({ children }: MdProps) => <h6 className="mt-4 mb-1 text-[13px] font-medium leading-[20px] text-text-pg-muted first:mt-0">{children}</h6>,
+          h1: heading(1),
+          h2: heading(2),
+          h3: heading(3),
+          h4: heading(4),
+          h5: heading(5),
+          h6: heading(6),
 
-          p: ({ children }: MdProps) => <p className="my-4 leading-[22px] text-text-pg-muted first:mt-0 last:mb-0">{children}</p>,
+          p: ({ children }: MdProps) => <p className="my-4 leading-[26px] text-text-pg-muted first:mt-0 last:mb-0">{children}</p>,
 
           ul: ({ children }: MdProps) => <ul className="my-4 list-disc space-y-1.5 pl-6 text-text-pg-muted">{children}</ul>,
           ol: ({ children }: MdProps) => <ol className="my-4 list-decimal space-y-1.5 pl-6 text-text-pg-muted">{children}</ol>,
-          li: ({ children }: MdProps) => <li className="leading-[22px] [&>p]:my-0">{children}</li>,
+          li: ({ children }: MdProps) => <li className="leading-[26px] [&>p]:my-0">{children}</li>,
 
           blockquote: ({ children }: MdProps) => (
             <blockquote className="my-4 border-l-2 border-border-pg-strong pl-4 text-text-pg-muted italic">{children}</blockquote>
@@ -153,6 +172,6 @@ export function MarkdownContent({ content }: { content: string }) {
 }
 
 /** Back-compat alias for the previous 7-line re-export. */
-export function Markdown({ content }: { content: string }) {
-  return <MarkdownContent content={content} />;
+export function Markdown({ content, headingBaseLevel }: MarkdownProps) {
+  return <MarkdownContent content={content} headingBaseLevel={headingBaseLevel} />;
 }

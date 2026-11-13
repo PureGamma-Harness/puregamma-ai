@@ -2,72 +2,97 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Bell, BookOpen, Bot, BrainCircuit, BriefcaseBusiness, Chrome, Code2, CreditCard, FlaskConical, Gauge, HeartHandshake, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Network, Newspaper, Smartphone, UserRound, X, type LucideIcon } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
+import { BookOpen, Bot, BrainCircuit, BriefcaseBusiness, ChevronDown, ChevronRight, Code2, CreditCard, FlaskConical, Gauge, HeartHandshake, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Network, Newspaper, Search, Smartphone, UserRound, X, type LucideIcon } from "lucide-react";
 import { AppearanceControls } from "@/components/appearance-controls";
 import { WorkspaceLoading } from "@/components/workspace-feedback";
-import { PlanBadge, Badge } from "@/components/puregamma";
+import { WorkspaceCommandMenu, type WorkspaceDestination } from "@/components/workspace-command-menu";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/routing";
 import { stripLocale, withLocale } from "@/i18n/routing";
-import { t } from "@/lib/translations";
-import type { TranslationKey } from "@/lib/translations";
+import { t, type TranslationKey } from "@/lib/translations";
 import { getMe, AUTH_EXPIRED_EVENT } from "@/lib/api";
-import { formatClockTime, formatUtcTime, useClockNow } from "@/lib/chrono";
-import { publishUserState, USER_STATE_EVENT, type SessionUserState } from "@/lib/user-state";
+import { getUserStateUpdate, isIdentityUserStateEvent, USER_STATE_EVENT, type SessionUserState } from "@/lib/user-state";
 import { applySurfaceTier, surfaceTierForPath } from "@/lib/visual-style";
 import { Chronosphere } from "@/components/chrono/chronosphere";
 import { PluginRuntime } from "@/plugins/core/runtime";
 import { usePluginNavItems } from "@/plugins/core/services/navigation";
 
-type NavItem = {
-  href: string;
-  labelKey: TranslationKey;
-  icon: LucideIcon;
-};
-
-type NavGroup = {
-  labelKey: TranslationKey;
-  items: NavItem[];
-};
-
+type NavItem = { href: string; labelKey: TranslationKey; icon: LucideIcon; keywords?: string };
+type NavGroup = { labelKey: TranslationKey; items: NavItem[]; collapsible?: boolean };
 type StoredUser = SessionUserState;
+type AccountView = { state: "loading" | "known" | "unavailable" | "signed-out"; user: StoredUser | null };
 
 const groups: NavGroup[] = [
   {
-    labelKey: "common.nav.groups.research",
+    labelKey: "common.nav.groups.workspace",
     items: [
       { href: "/dashboard", labelKey: "common.nav.dashboard", icon: LayoutDashboard },
-      { href: "/news", labelKey: "common.nav.news", icon: Newspaper },
       { href: "/chat", labelKey: "common.nav.chat", icon: Bot },
-      { href: "/research", labelKey: "common.nav.research", icon: FlaskConical },
+      { href: "/research", labelKey: "common.nav.research", icon: FlaskConical, keywords: "Harness" },
       { href: "/reports", labelKey: "common.nav.reports", icon: BookOpen },
-      { href: "/options", labelKey: "common.nav.options", icon: Gauge },
-      { href: "/backtest", labelKey: "common.nav.backtest", icon: FlaskConical }
-    ]
+      { href: "/portfolio", labelKey: "common.nav.nav", icon: BriefcaseBusiness, keywords: "NAV" },
+      { href: "/news", labelKey: "common.nav.news", icon: Newspaper },
+    ],
   },
   {
-    labelKey: "common.nav.groups.portfolio",
+    labelKey: "common.nav.groups.manage",
     items: [
-      { href: "/portfolio", labelKey: "common.nav.nav", icon: BriefcaseBusiness },
-      { href: "/secretary", labelKey: "common.nav.secretary", icon: HeartHandshake },
-      { href: "/api", labelKey: "common.nav.apiDocs", icon: Code2 },
-      { href: "/docs", labelKey: "common.nav.docs", icon: LifeBuoy }
-    ]
-  },
-  {
-    labelKey: "common.nav.groups.company",
-    items: [
-      { href: "/billing", labelKey: "common.nav.billing", icon: CreditCard },
-      { href: "/gateway", labelKey: "common.nav.gateway", icon: Network },
       { href: "/memory", labelKey: "common.nav.memory", icon: BrainCircuit },
+      { href: "/secretary", labelKey: "common.nav.secretary", icon: HeartHandshake },
+      { href: "/billing", labelKey: "common.nav.billing", icon: CreditCard },
+      { href: "/account", labelKey: "common.nav.account", icon: UserRound },
+    ],
+  },
+  {
+    labelKey: "common.nav.groups.tools",
+    collapsible: true,
+    items: [
+      { href: "/options", labelKey: "common.nav.options", icon: Gauge },
+      { href: "/backtest", labelKey: "common.nav.backtest", icon: FlaskConical },
+      { href: "/gateway", labelKey: "common.nav.gateway", icon: Network },
+      { href: "/api", labelKey: "common.nav.apiDocs", icon: Code2 },
+      { href: "/docs", labelKey: "common.nav.docs", icon: LifeBuoy },
       { href: "/mobile-access", labelKey: "common.nav.mobileAccess", icon: Smartphone },
-      { href: "/account", labelKey: "common.nav.account", icon: UserRound }
-    ]
-  }
+      { href: "/account#imessage-bind", labelKey: "common.nav.imessage", icon: MessageCircle },
+    ],
+  },
 ];
+
+function isCurrentPath(pathname: string, href: string) {
+  if (href.includes("#")) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavigationGroups({ locale, pathname, onNavigate }: { locale: Locale; pathname: string; onNavigate?: () => void }) {
+  return <>{groups.map(group => {
+    const items = <div className="space-y-0.5">{group.items.map(item => {
+      const Icon = item.icon;
+      const active = isCurrentPath(pathname, item.href);
+      return <Link key={item.href} href={withLocale(locale, item.href)} onClick={onNavigate} aria-current={active ? "page" : undefined} className={`nav-item ${active ? "nav-active" : ""}`}>
+        <Icon className="nav-icon" aria-hidden />{t(locale, item.labelKey)}
+      </Link>;
+    })}</div>;
+    return group.collapsible ? <details key={group.labelKey} className="group" open={group.items.some(item => isCurrentPath(pathname, item.href))}>
+      <summary className="mb-1 flex min-h-11 cursor-pointer list-none items-center justify-between rounded-lg px-3 text-[11px] font-medium text-text-pg-dim hover:bg-bg-panel-muted hover:text-text-pg [&::-webkit-details-marker]:hidden">
+        {t(locale, group.labelKey)}<ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
+      </summary>{items}
+    </details> : <div key={group.labelKey}>
+      <div className="mb-2 px-3 text-[11px] font-medium text-text-pg-dim">{t(locale, group.labelKey)}</div>{items}
+    </div>;
+  })}</>;
+}
+
+function currentPageLabel(pathname: string, locale: Locale) {
+  if (pathname === "/") return locale === "zh" ? "首页" : "Home";
+  const item = groups.flatMap(group => group.items).find(item => isCurrentPath(pathname, item.href));
+  if (item) return t(locale, item.labelKey);
+  if (pathname.startsWith("/onboarding")) return locale === "zh" ? "首次设置" : "Setup";
+  if (pathname.startsWith("/admin")) return locale === "zh" ? "管理" : "Administration";
+  return locale === "zh" ? "工作区" : "Workspace";
+}
 
 function AuthExpiredRedirector({ locale }: { locale: Locale }) {
   const router = useRouter();
@@ -96,7 +121,7 @@ function PluginNavSection({ locale, onNavigate }: { locale: Locale; onNavigate?:
   const activePathname = stripLocale(pathname);
   return (
     <div>
-      <div className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-pg-dim">{t(locale, "common.nav.groups.trading")}</div>
+      <div className="mb-2 px-3 text-[11px] font-medium text-text-pg-dim">{t(locale, "common.nav.groups.trading")}</div>
       <div className="space-y-1">
         {items.map((item) => {
           const label = item.labelKey ? t(locale, item.labelKey) : item.label;
@@ -132,19 +157,24 @@ function MainContentFallback({ children }: { children: ReactNode }) {
 
 export function AppShell({ children, locale }: { children: ReactNode; locale: Locale }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
-  // The root <html> element is shared across locales; keep its lang accurate
-  // for SEO and assistive technology.
-  useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  }, [locale]);
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname, locale]);
-  // Route-derived surface tier for the glass visual system: financial/security
-  // pages get higher-opacity panels, Ocean pages skip the extra blur. The
-  // attribute lives on <html> so CSS tokens can scope it; remove it when the
-  // shell unmounts (non-locale pages have no shell).
+  const segments = useSelectedLayoutSegments();
+  // Follow the actual route tree. A history-only URL rename must preserve an
+  // active conversation and its stream instead of remounting the workspace.
+  const routeIdentity = JSON.stringify([locale, ...segments]);
+  const closeNavigation = useCallback(() => setMobileNavOpen(false), []);
+  const closeCommands = useCallback(() => setCommandOpen(false), []);
+  const openCommands = useCallback(() => { setMobileNavOpen(false); setCommandOpen(true); }, []);
+  const destinations = useMemo<WorkspaceDestination[]>(() => groups.flatMap(group => group.items.map(item => ({
+    href: item.href,
+    label: t(locale, item.labelKey),
+    group: t(locale, group.labelKey),
+    keywords: `${t("en", item.labelKey)} ${t("zh", item.labelKey)} ${item.keywords || ""}`,
+    icon: item.icon,
+  }))), [locale]);
+  useEffect(() => { document.documentElement.lang = locale === "zh" ? "zh-CN" : "en"; }, [locale]);
+  useEffect(() => { setMobileNavOpen(false); }, [pathname, locale]);
   useEffect(() => {
     applySurfaceTier(surfaceTierForPath(pathname || "/"));
     return () => applySurfaceTier(null);
@@ -156,17 +186,16 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
           <a href="#main-content" className="skip-navigation">{locale === "zh" ? "跳至主要内容" : "Skip to main content"}</a>
           <Chronosphere />
           <AuthExpiredRedirector locale={locale} />
-        <SidebarNav locale={locale} />
-        <MobileNavDrawer locale={locale} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-
-        <div className="lg:pl-[284px]">
-          <TopStatusBar locale={locale} mobileNavOpen={mobileNavOpen} onMenuClick={() => setMobileNavOpen(true)} />
-
-            <main id="main-content" tabIndex={-1} className="shell-main mx-auto max-w-[1440px] px-4 py-5 md:px-6">
+          <SidebarNav locale={locale} />
+          <MobileNavDrawer locale={locale} open={mobileNavOpen} onClose={closeNavigation} onSearch={openCommands} />
+          <WorkspaceCommandMenu locale={locale} open={commandOpen} destinations={destinations} onRequestOpen={openCommands} onClose={closeCommands} />
+          <div className="lg:pl-[calc(var(--pg-rail-width)+24px)]">
+            <TopStatusBar locale={locale} mobileNavOpen={mobileNavOpen} commandOpen={commandOpen} onMenuClick={() => setMobileNavOpen(true)} onSearch={openCommands} />
+            <main id="main-content" tabIndex={-1} className="shell-main mx-auto w-full max-w-[1440px]">
               {/* Isolate pending page modules from shared navigation. Keep the
                   landmark outside the boundary: Fizz may outline even completed
                   large content into a hidden streamed segment. */}
-              <Suspense fallback={<MainContentFallback>{children}</MainContentFallback>}>
+              <Suspense key={routeIdentity} fallback={<MainContentFallback>{children}</MainContentFallback>}>
                 {children}
               </Suspense>
             </main>
@@ -177,7 +206,7 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
   );
 }
 
-export function MobileNavDrawer({ locale, open, onClose }: { locale: Locale; open: boolean; onClose: () => void }) {
+export function MobileNavDrawer({ locale, open, onClose, onSearch }: { locale: Locale; open: boolean; onClose: () => void; onSearch: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pathname = usePathname();
   const activePathname = stripLocale(pathname);
@@ -206,204 +235,199 @@ export function MobileNavDrawer({ locale, open, onClose }: { locale: Locale; ope
     return () => desktop.removeEventListener("change", dismissOnDesktop);
   }, [open, onClose]);
   return (
-      <dialog ref={dialogRef} id="mobile-navigation" aria-label={locale === "zh" ? "主导航" : "Primary navigation"} className="mobile-nav-dialog" onCancel={onClose} onClose={onClose} onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
-      }}>
-        <div className="flex items-center justify-between gap-2">
-          <Link href={withLocale(locale, "/")} onClick={onClose} className="flex min-w-0 items-center gap-2 font-semibold text-text-pg">
-            <Image src="/logo.png" alt="PureGamma" width={24} height={24} />PureGamma AI
-          </Link>
-          <button type="button" autoFocus onClick={onClose} aria-label={locale === "zh" ? "关闭导航" : "Close navigation"} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong rounded-lg"><X className="h-4 w-4" aria-hidden /></button>
-        </div>
-        <nav className="mt-6 flex-1 space-y-7 overflow-y-auto" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
-          {groups.map((group) => (
-            <div key={group.labelKey}>
-              <div className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-pg-dim">{t(locale, group.labelKey)}</div>
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = item.href === "/" ? activePathname === "/" : activePathname.startsWith(item.href);
-                  return (
-                    <Link key={item.href} href={withLocale(locale, item.href)} onClick={onClose} aria-current={active ? "page" : undefined} className={`nav-item ${active ? "nav-active" : ""}`}>
-                      <Icon className="nav-icon" aria-hidden />
-                      {t(locale, item.labelKey)}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <PluginNavSection locale={locale} onNavigate={onClose} />
-        </nav>
-        <Link href={withLocale(locale, "/account#imessage-bind")} onClick={onClose} className="flex items-center gap-2 border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg rounded-lg">
-          <MessageCircle className="h-4 w-4" aria-hidden />
-          {locale === "zh" ? "绑定 iMessage" : "Bind iMessage"}
+    <dialog ref={dialogRef} id="mobile-navigation" aria-label={locale === "zh" ? "主导航" : "Primary navigation"} className="mobile-nav-dialog" onCancel={onClose} onClose={onClose} onClick={event => {
+      if (event.target !== event.currentTarget) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+    }}>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <Link href={withLocale(locale, "/")} onClick={onClose} className="flex min-w-0 items-center gap-2.5 font-semibold text-text-pg">
+          <Image src="/logo.png" alt="" width={24} height={24} />PureGamma AI
         </Link>
-        {/*
-          Language and appearance moved here from the small-screen header.
-
-          They were removed from the top bar because that row also held the
-          wordmark, and the flex algorithm resolved the competition by
-          compressing the brand to 65px — the brand lost and the secondary
-          controls won. Keeping them reachable (rather than deleting them) is
-          what makes that a layout fix instead of a feature removal. The drawer also keeps the full font-size controls reachable at tablet
-          widths; the compact top bar only repeats the theme/style switches.
-        */}
-        <div className="mt-3 border-t border-border-pg pt-3" data-testid="nav-secondary-controls">
-          <span className="text-xs text-text-pg-dim">
-            {locale === "zh" ? "显示与外观" : "Display & appearance"}
-          </span>
-          <div className="mt-2 flex items-center gap-1.5">
-            <LanguageSwitcher compact />
-            <AppearanceControls locale={locale} />
-          </div>
-        </div>
-      </dialog>
+        <button type="button" autoFocus onClick={onClose} aria-label={locale === "zh" ? "关闭导航" : "Close navigation"} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-text-pg-muted hover:bg-bg-panel-muted hover:text-text-pg"><X className="h-4 w-4" aria-hidden /></button>
+      </div>
+      <button type="button" onClick={onSearch} className="mt-4 flex min-h-11 shrink-0 items-center gap-3 rounded-lg border border-border-pg bg-bg-panel-muted px-3 text-left text-sm text-text-pg-muted">
+        <Search className="h-4 w-4" aria-hidden />{locale === "zh" ? "查找页面" : "Search pages"}
+      </button>
+      <nav className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
+        <NavigationGroups locale={locale} pathname={activePathname} onNavigate={onClose} />
+        <PluginNavSection locale={locale} onNavigate={onClose} />
+      </nav>
+      <div className="mt-3 shrink-0 border-t border-border-pg pt-3" data-testid="nav-secondary-controls">
+        <span className="text-[11px] text-text-pg-dim">{locale === "zh" ? "语言与显示" : "Language & display"}</span>
+        <div className="mt-2 flex flex-wrap items-center gap-2"><LanguageSwitcher compact /><AppearanceControls locale={locale} /></div>
+      </div>
+    </dialog>
   );
 }
 
 export function SidebarNav({ locale }: { locale: Locale }) {
-  const pathname = usePathname();
-  const activePathname = stripLocale(pathname);
+  const pathname = stripLocale(usePathname());
+  const navigationRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const navigation = navigationRef.current;
+    if (!navigation) return;
+    const revealCurrentPage = () => {
+      if (!navigation.getClientRects().length) return;
+      const current = navigation.querySelector<HTMLElement>('a[aria-current="page"]');
+      if (!current) return;
+      const viewport = navigation.getBoundingClientRect();
+      const item = current.getBoundingClientRect();
+      if (!viewport.height || !item.height) return;
+      const inset = 4;
+      // Scroll only this rail region; revealing the current page must not move
+      // the document, main content, or keyboard focus.
+      if (item.top < viewport.top + inset) navigation.scrollTop += item.top - viewport.top - inset;
+      else if (item.bottom > viewport.bottom - inset) navigation.scrollTop += item.bottom - viewport.bottom + inset;
+    };
+    revealCurrentPage();
+    const observer = new ResizeObserver(revealCurrentPage);
+    observer.observe(navigation);
+    return () => observer.disconnect();
+  }, [pathname, locale]);
   return (
-    <aside className="shell-rail hidden flex-col p-4 lg:flex">
-      <Link href={withLocale(locale, "/")} className="flex items-center gap-2.5"><Image src="/logo.png" alt="PureGamma" width={22} height={22} /><span className="text-[0.95rem] font-semibold tracking-tight text-text-pg">PureGamma</span><span className="mt-0.5 text-[0.6rem] font-medium uppercase tracking-[0.3em] text-text-pg-dim">AI</span>
+    <aside className="shell-rail hidden flex-col px-3 py-5 lg:flex">
+      <Link href={withLocale(locale, "/")} className="mx-3 flex min-h-9 items-center gap-2.5 font-semibold tracking-tight text-text-pg">
+        <Image src="/logo.png" alt="" width={25} height={25} /><span className="text-[15px]">PureGamma <span className="font-normal text-text-pg-dim">AI</span></span>
       </Link>
-      <div className="mt-2 text-sm leading-6 text-text-pg-muted">{t(locale, "common.nav.tagline")}</div>
-      <div className="mt-4">
-        <div className="flex flex-wrap items-center gap-2"><LanguageSwitcher compact /><AppearanceControls locale={locale} /></div>
-      </div>
-      <nav className="shell-nav mt-8 flex-1 space-y-7 overflow-y-auto pr-1" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
-        {groups.map((group) => (
-          <div key={group.labelKey}>
-            <div className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-pg-dim">{t(locale, group.labelKey)}</div>
-            <div className="space-y-1">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active = item.href === "/" ? activePathname === "/" : activePathname.startsWith(item.href);
-                return (
-                  <Link key={item.href} href={withLocale(locale, item.href)} aria-current={active ? "page" : undefined} className={`nav-item ${active ? "nav-active" : ""}`}>
-                    <Icon className="nav-icon" aria-hidden />
-                    {t(locale, item.labelKey)}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="mx-3 mt-1 text-[11px] text-text-pg-dim">{locale === "zh" ? "研究工作区" : "Research workspace"}</div>
+      <nav ref={navigationRef} className="shell-nav mt-7 min-h-0 flex-1 space-y-5 overflow-y-auto" aria-label={locale === "zh" ? "主导航" : "Primary navigation"}>
+        <NavigationGroups locale={locale} pathname={pathname} />
         <PluginNavSection locale={locale} />
       </nav>
-      <Link href={withLocale(locale, "/account#imessage-bind")} className="mt-3 flex shrink-0 items-center gap-2 border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg rounded-lg">
-        <MessageCircle className="h-4 w-4" aria-hidden />
-        {locale === "zh" ? "绑定 iMessage" : "Bind iMessage"}
-      </Link>
+      <div className="mt-4 shrink-0 border-t border-border-pg px-2 pt-3">
+        <div className="mb-2 text-[11px] text-text-pg-dim">{locale === "zh" ? "语言与字号" : "Language & text size"}</div>
+        <div className="flex flex-wrap items-center justify-between gap-1"><LanguageSwitcher compact /><AppearanceControls locale={locale} showThemeAndStyle={false} /></div>
+      </div>
     </aside>
   );
 }
 
-export function TopStatusBar({ locale, onMenuClick, mobileNavOpen = false }: { locale: Locale; onMenuClick: () => void; mobileNavOpen?: boolean }) {
-  const [storedUser, setStoredUser] = useState<StoredUser | null>(null);
-  const pathname = usePathname();
-  const dashboardRoute = stripLocale(pathname || "/") === "/dashboard";
-  const refreshUser = useCallback(async () => {
-    const result = await getMe();
-    setStoredUser(result.user);
-    publishUserState(result.user, true);
-  }, []);
+function financialFields(user: StoredUser): StoredUser {
+  const update: StoredUser = {};
+  if (typeof user.credit_balance === "number" && Number.isFinite(user.credit_balance) && user.credit_balance >= 0) update.credit_balance = user.credit_balance;
+  if (typeof user.plan === "string" && user.plan.trim()) update.plan = user.plan;
+  return update;
+}
 
+function useAccountView() {
+  const [account, setAccount] = useState<AccountView>({ state: "loading", user: null });
   useEffect(() => {
     let active = true;
-    const refresh = () => refreshUser().catch((error: unknown) => {
-      // Only drop the session UI on a definitive 401; transient errors (429, network)
-      // must not flip the top bar to "signed out".
-      const status = (error as { status?: number } | null)?.status;
-      if (active && status === 401) setStoredUser(null);
-    });
+    let signedOut = false;
+    let confirmed: StoredUser | null = null;
+    let pendingFinancial: StoredUser = {};
+    let inFlight: AbortController | null = null;
+    const refresh = async () => {
+      if (!active || inFlight) return;
+      const controller = new AbortController();
+      inFlight = controller;
+      try {
+        const result = await getMe(controller.signal);
+        if (!active || controller.signal.aborted) return;
+        if (!result.user || typeof result.user.id !== "string" || !result.user.id.trim()) {
+          if (!confirmed) setAccount({ state: "unavailable", user: null });
+          return;
+        }
+        confirmed = { ...result.user, ...pendingFinancial };
+        pendingFinancial = {};
+        signedOut = false;
+        setAccount({ state: "known", user: confirmed });
+      } catch (error) {
+        if (!active || controller.signal.aborted) return;
+        if ((error as { status?: number } | null)?.status === 401) {
+          signedOut = true;
+          confirmed = null;
+          pendingFinancial = {};
+          setAccount({ state: "signed-out", user: null });
+        } else if (!confirmed) setAccount({ state: "unavailable", user: null });
+      } finally {
+        if (inFlight === controller) inFlight = null;
+      }
+    };
     const handleUserState = (event: Event) => {
-      const detail = (event as CustomEvent<SessionUserState>).detail;
-      if (detail && active) setStoredUser((current) => ({ ...(current || {}), ...detail }));
+      const detail = (event as CustomEvent<StoredUser>).detail;
+      if (!active || !detail || typeof detail !== "object" || Array.isArray(detail)) return;
+      const update = getUserStateUpdate(event) || financialFields(detail);
+      if (!isIdentityUserStateEvent(event)) {
+        // Detail may contain a cached identity merged by publishUserState.
+        // Only the original financial delta belongs to a partial update.
+        if (signedOut) return;
+        const financial = financialFields(update);
+        if (!Object.keys(financial).length) return;
+        if (!confirmed) {
+          pendingFinancial = { ...pendingFinancial, ...financial };
+          return;
+        }
+        inFlight?.abort();
+        confirmed = { ...confirmed, ...financial };
+        setAccount({ state: "known", user: confirmed });
+        return;
+      }
+      inFlight?.abort();
+      const sameUser = !confirmed?.id || confirmed.id === update.id;
+      confirmed = sameUser ? { ...update, ...pendingFinancial } : { ...update };
+      pendingFinancial = {};
+      signedOut = false;
+      setAccount({ state: "known", user: confirmed });
     };
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
-    };
-    void refresh();
+    const handleVisibility = () => { if (document.visibilityState === "visible") void refresh(); };
     window.addEventListener(USER_STATE_EVENT, handleUserState);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", handleVisibility);
-    const refreshTimer = window.setInterval(refresh, 60_000);
+    const timer = window.setInterval(refresh, 60_000);
+    void refresh();
     return () => {
       active = false;
-      window.clearInterval(refreshTimer);
+      inFlight?.abort();
+      window.clearInterval(timer);
       window.removeEventListener(USER_STATE_EVENT, handleUserState);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [refreshUser]);
+  }, []);
+  return account;
+}
+
+export function TopStatusBar({ locale, onMenuClick, onSearch, mobileNavOpen = false, commandOpen = false }: { locale: Locale; onMenuClick: () => void; onSearch: () => void; mobileNavOpen?: boolean; commandOpen?: boolean }) {
+  const account = useAccountView();
+  const pathname = stripLocale(usePathname() || "/");
+  const zh = locale === "zh";
+  const user = account.user;
+  const credits = user?.credit_balance;
+  const knownCredits = typeof credits === "number" && Number.isFinite(credits) && credits >= 0;
+  const name = user?.name || user?.email || (zh ? "账户" : "Account");
   return (
     <header className="shell-chrome">
-      <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-4 sm:px-5 sm:py-3">
-        {/*
-          Small-screen header order: menu, BRAND, primary action.
-          The brand sits second and is allowed to keep its natural width
-          (`shrink-0`). It used to be the only shrinkable item in a row that also
-          held the language switcher and four appearance buttons, so at 390px the
-          flex algorithm squeezed it to 65px and the wordmark rendered as
-          "PureG…" — the brand was unreadable on the device most visitors use.
-          The fix is to stop competing for that space: the language switcher and
-          appearance controls moved into the drawer, where they are still
-          reachable, and the brand is no longer compressible. Font size was not
-          reduced to make things fit.
-        */}
-        <button type="button" onClick={onMenuClick} aria-expanded={mobileNavOpen} aria-controls="mobile-navigation" aria-haspopup="dialog" aria-label={locale === "zh" ? "打开导航" : "Open navigation"} className="grid h-11 w-11 shrink-0 place-items-center border border-border-pg text-text-pg-muted hover:border-border-pg-strong lg:hidden rounded-lg" data-testid="nav-menu-button"><Menu className="h-4 w-4" aria-hidden /></button>
-        <Link
-          href={withLocale(locale, "/")}
-          className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold text-text-pg lg:hidden"
-          data-testid="nav-brand"
-        >
-          <Image src="/logo.png" alt="" width={20} height={20} />
-          <span>PureGamma AI</span>
-          <span className="sr-only">{locale === "zh" ? "，返回首页" : ", back to home"}</span>
+      <div className="flex min-h-[var(--pg-header-height)] w-full items-center justify-between gap-3 px-4 lg:px-6">
+        <button type="button" onClick={onMenuClick} aria-expanded={mobileNavOpen} aria-controls="mobile-navigation" aria-haspopup="dialog" aria-label={zh ? "打开导航" : "Open navigation"} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-text-pg-muted hover:bg-bg-panel-muted lg:hidden" data-testid="nav-menu-button"><Menu className="h-[18px] w-[18px]" aria-hidden /></button>
+        <Link href={withLocale(locale, "/")} className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[15px] font-semibold text-text-pg lg:hidden" data-testid="nav-brand">
+          <Image src="/logo.png" alt="" width={20} height={20} /><span>PureGamma AI</span><span className="sr-only">{zh ? "，返回首页" : ", back to home"}</span>
         </Link>
-        <div className="hidden items-center gap-2 text-xs md:flex">
-          {!dashboardRoute ? <TopClock locale={locale} /> : null}
-          <PlanBadge plan={storedUser?.plan || "Free"} tier={storedUser?.membership_tier} locale={locale} />
-          <Badge tone="neutral">{storedUser ? `${storedUser.credit_balance ?? 0} credits` : t(locale, "common.topbar.credits")}</Badge>
-          <LanguageSwitcher compact />
-          <AppearanceControls locale={locale} showFontScale={false} />
-          {storedUser ? (
-            <Link href={withLocale(locale, "/account")} className="ml-2 flex items-center gap-2 border border-border-pg bg-bg-panel-muted px-2 py-1 hover:border-border-pg-strong rounded-lg">
-              {storedUser.avatar_url ? <span aria-hidden className="h-5 w-5 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${storedUser.avatar_url})` }} /> : null}
-              {storedUser.auth_provider === "google" ? <Chrome className="h-3.5 w-3.5" aria-label="Google" /> : null}
-              <span className="max-w-[140px] truncate">{storedUser.name || storedUser.email}</span>
-            </Link>
-          ) : (
-            <>
-              <Link href={withLocale(locale, "/signup")} className="ml-2 border border-border-pg-strong bg-[var(--pg-surface-inverse)] px-3 py-1 text-xs font-semibold text-[var(--pg-text-inverse)] rounded-lg">{t(locale, "common.nav.signup")}</Link>
-              <Link href={withLocale(locale, "/login")} className="border border-border-pg px-3 py-1 text-xs text-text-pg hover:border-border-pg-strong rounded-lg">{t(locale, "common.nav.signin")}</Link>
-            </>
-          )}
-        </div>
-        {/* Only the primary action competes with the brand here; everything
-            secondary lives in the drawer. */}
-        <div className="flex shrink-0 items-center gap-2 text-xs text-text-pg-muted md:hidden">
-          {storedUser ? null : (
-            <Link href={withLocale(locale, "/signup")} className="whitespace-nowrap border border-border-pg-strong bg-[var(--pg-surface-inverse)] px-2.5 py-1 font-semibold text-[var(--pg-text-inverse)] rounded-lg">{t(locale, "common.nav.signup")}</Link>
-          )}
+        <nav className="hidden min-w-0 items-center gap-2 text-[13px] lg:flex" aria-label={zh ? "当前位置" : "Breadcrumb"}>
+          <span className="shrink-0 text-text-pg-dim">{zh ? "工作区" : "Workspace"}</span><ChevronRight className="h-3 w-3 shrink-0 text-text-pg-dim" aria-hidden /><span className="truncate font-medium text-text-pg" aria-current="page">{currentPageLabel(pathname, locale)}</span>
+        </nav>
+        <div className="flex min-w-0 shrink-0 items-center gap-2 lg:ml-auto lg:gap-3">
+          <button type="button" onClick={onSearch} data-testid="workspace-search-trigger" aria-haspopup="dialog" aria-controls="workspace-page-search" aria-expanded={commandOpen} aria-label={zh ? "查找页面" : "Search pages"} className="flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-lg text-text-pg-muted hover:bg-bg-panel-muted hover:text-text-pg lg:w-auto lg:justify-start lg:border lg:border-border-pg lg:px-3">
+            <Search className="h-[17px] w-[17px]" aria-hidden /><span className="hidden text-xs lg:inline">{zh ? "查找页面" : "Search pages"}</span><kbd className="ml-2 hidden rounded border border-border-pg px-1.5 py-0.5 font-sans text-[10px] text-text-pg-dim xl:inline">⌘ / Ctrl K</kbd>
+          </button>
+          <div className="hidden items-center border-l border-border-pg pl-2 lg:flex"><AppearanceControls locale={locale} showFontScale={false} /></div>
+          <div className="hidden min-w-[112px] items-center justify-end gap-2 border-l border-border-pg pl-3 lg:flex" aria-label={zh ? "账户状态" : "Account status"} aria-busy={account.state === "loading"} data-testid="account-summary" data-account-state={account.state}>
+            {account.state === "loading" ? <span role="status" className="text-xs text-text-pg-dim">{zh ? "正在读取账户…" : "Loading account…"}</span> : user ? <>
+              <div className="hidden text-right xl:block">
+                {typeof user.plan === "string" && user.plan.trim() ? <div className="text-[11px] font-medium text-text-pg">{user.plan}</div> : <div className="text-[11px] text-text-pg-dim">{zh ? "方案暂不可用" : "Plan unavailable"}</div>}
+                <div className="mt-0.5 text-[11px] tabular-nums text-text-pg-muted" data-testid="account-credits">{knownCredits ? `${credits.toLocaleString(zh ? "zh-CN" : "en-US")} ${zh ? "积分" : "credits"}` : t(locale, "common.topbar.credits")}</div>
+              </div>
+              <Link href={withLocale(locale, "/account")} aria-label={zh ? `打开账户：${name}` : `Open account: ${name}`} title={name} className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border border-border-pg bg-bg-panel-muted text-xs font-semibold text-text-pg hover:border-border-pg-strong">
+                {user.avatar_url ? <Image src={user.avatar_url} alt="" width={36} height={36} unoptimized className="h-full w-full object-cover" /> : <span aria-hidden>{Array.from(name.trim())[0]?.toLocaleUpperCase() || <UserRound className="h-4 w-4" />}</span>}
+              </Link>
+            </> : account.state === "signed-out" ? <>
+              <Link href={withLocale(locale, "/login")} className="grid min-h-11 place-items-center whitespace-nowrap rounded-lg px-3 text-xs font-medium text-text-pg-muted hover:bg-bg-panel-muted">{t(locale, "common.nav.signin")}</Link>
+              <Link href={withLocale(locale, "/signup")} className="pg-button min-h-11 whitespace-nowrap px-3 text-xs">{t(locale, "common.nav.signup")}</Link>
+            </> : <Link href={withLocale(locale, "/account")} className="text-xs text-text-pg-muted">{zh ? "账户暂不可用" : "Account unavailable"}</Link>}
+          </div>
         </div>
       </div>
     </header>
-  );
-}
-
-function TopClock({ locale }: { locale: Locale }) {
-  const now = useClockNow(1000);
-  return (
-    <span className="hidden items-center gap-2 whitespace-nowrap font-mono text-[0.68rem] tabular-nums text-text-pg-muted xl:inline-flex">
-      <span aria-hidden className="status-dot status-dot-live" />
-      {formatClockTime(now, locale === "zh" ? "zh-CN" : "en-US")}
-      <span className="text-text-pg-dim">· UTC {formatUtcTime(now)}</span>
-    </span>
   );
 }

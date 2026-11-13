@@ -96,7 +96,7 @@ export function CapabilityGate({ state, locale, title, onRetry, children }: {
   if (state.status === "available") return <>{children}</>;
   if (state.status === "unauthorized") {
     return (
-      <div role="status" className="flex items-start gap-3 border border-border-pg bg-bg-panel p-5">
+      <div role="status" className="flex items-start gap-3 rounded-xl border border-border-pg bg-bg-panel p-5">
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" aria-hidden />
         <div>
           <p className="text-sm font-semibold">{zh ? "需要登录或更高权限" : "Sign-in or higher permissions required"}</p>
@@ -107,13 +107,13 @@ export function CapabilityGate({ state, locale, title, onRetry, children }: {
   }
   if (state.status === "error") {
     return (
-      <div role="alert" className="flex items-start gap-3 border border-status-negative bg-bg-panel p-5">
+      <div role="alert" className="flex items-start gap-3 rounded-xl border border-status-negative bg-bg-panel p-5">
         <ServerCrash className="mt-0.5 h-5 w-5 shrink-0 text-status-negative" aria-hidden />
         <div>
           <p className="text-sm font-semibold">{zh ? "服务异常" : "Service error"}</p>
           <p className="mt-1 text-xs text-text-pg-muted">{zh ? "暂时无法加载该功能，请稍后重试。" : "This feature could not be loaded. Please try again shortly."}</p>
           {onRetry ? (
-            <button type="button" onClick={onRetry} className="mt-3 inline-flex items-center gap-1.5 border border-border-pg px-2.5 py-1 text-xs hover:border-border-pg-strong rounded-lg">
+            <button type="button" onClick={onRetry} className="pg-button pg-button-secondary mt-3 min-h-11 gap-2 px-3 text-sm">
               <RefreshCw className="h-3 w-3" aria-hidden />
               {zh ? "重试" : "Retry"}
             </button>
@@ -123,7 +123,7 @@ export function CapabilityGate({ state, locale, title, onRetry, children }: {
     );
   }
   return (
-    <div role="status" className="flex items-start gap-3 border border-border-pg bg-bg-panel p-5">
+    <div role="status" className="flex items-start gap-3 rounded-xl border border-border-pg bg-bg-panel p-5">
       <Ban className="mt-0.5 h-5 w-5 shrink-0 text-text-pg-muted" aria-hidden />
       <div>
         <p className="text-sm font-semibold">{title || (zh ? "功能暂不可用" : "Feature not available yet")}</p>

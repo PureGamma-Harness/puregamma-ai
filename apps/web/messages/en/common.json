@@ -9,40 +9,44 @@
     "switchToChinese": "Switch language to Simplified Chinese"
   },
   "nav": {
-    "tagline": "AI decisions for Beta, Alpha, and Long Gamma.",
+    "tagline": "Evidence-led research workspace.",
     "groups": {
       "research": "Harness",
       "portfolio": "Portfolio",
       "infrastructure": "Infrastructure",
       "company": "Company",
-      "trading": "Trading"
+      "trading": "Trading",
+      "workspace": "Workspace",
+      "manage": "Manage",
+      "tools": "Tools & resources"
     },
     "dashboard": "Dashboard",
     "news": "Market Wire",
-    "research": "Harness",
+    "research": "Research",
     "reports": "Reports",
     "options": "Options",
     "backtest": "Backtest",
     "signals": "Signals",
     "playbooks": "Playbooks",
-    "chat": "Agent Chat",
-    "nav": "NAV",
-    "secretary": "Private Secretary",
+    "chat": "Agent",
+    "nav": "Portfolio",
+    "secretary": "Assistant",
     "integrations": "Integrations",
     "dailyPush": "Daily Push",
     "dataSources": "Data Sources",
     "nautilus": "NautilusTrader",
     "billing": "Billing",
-    "gateway": "API Console",
-    "apiDocs": "API",
+    "gateway": "Model gateway",
+    "apiDocs": "API reference",
     "admin": "Admin",
     "account": "Account",
     "memory": "Memory",
-    "docs": "Docs",
+    "docs": "Help & docs",
     "access": "Access",
     "signup": "Sign Up",
     "signin": "Sign In",
-    "mobileAccess": "Mobile Access"
+    "mobileAccess": "Mobile Access",
+    "imessage": "Connect iMessage"
   },
   "auth": {
     "googleLogin": "Continue with Google",
@@ -122,7 +126,7 @@
     }
   },
   "topbar": {
-    "credits": "-- credits",
+    "credits": "Credits unavailable",
     "riskRegime": "Risk-on momentum",
     "freshness": "Fresh 60s",
     "imessage": "iMessage mock",

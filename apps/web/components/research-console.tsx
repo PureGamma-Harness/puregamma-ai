@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarClock, Database, FileSearch, FlaskConical, Plus, RefreshCw, Search, X } from "lucide-react";
 import { CapabilityGate, capabilityStateFromError, type CapabilityState } from "@/components/ocean/capability-gate";
-import { OceanShell } from "@/components/ocean/ocean-shell";
+import { Button } from "@/components/ui";
 import { StatusBadgeWithPulse } from "@/components/ocean/status-badge";
 import { createResearchRun, getResearchRuns, type HarnessResearchRun } from "@/lib/api";
 import { type Locale, withLocale } from "@/i18n/routing";
@@ -122,21 +122,28 @@ export function ResearchConsole({ locale }: { locale: Locale }) {
   });
 
   return (
-    <OceanShell locale={locale} variant="research" className="min-h-[calc(100dvh-7rem)] rounded-2xl">
-      <div className="mx-auto max-w-5xl px-4 py-6 md:px-8">
-        <header className="mb-6">
-          <div className="flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-pg-dim"><FlaskConical className="h-4 w-4" aria-hidden />{zh ? "研究工作台" : "Research workspace"}</div>
-          <h1 className="mt-3 text-2xl font-semibold leading-tight md:text-3xl">{zh ? "把问题变成可核验的研究。" : "Turn a question into evidence."}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-pg-muted">{zh ? "提出问题，选择证据来源，跟踪进展，再查看结论与限制。所有研究仅供决策参考，不会执行交易。" : "Frame a question, choose your sources, and follow the research through to findings and limitations. Research informs decisions; it never executes trades."}</p>
-        </header>
-        <CapabilityGate state={state} locale={locale} title={zh ? "深度研究暂不可用" : "Deep research is not available yet"} onRetry={() => void refresh()}>
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-text-pg-muted"><span><strong className="font-semibold text-text-pg">{total}</strong> {zh ? "个研究任务" : "research runs"}</span><span><strong className="font-semibold text-text-pg">{activeCount}</strong> {zh ? "个进行中（当前列表）" : "active in this list"}</span></div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => void refresh()} disabled={refreshing} aria-label={zh ? "刷新研究任务" : "Refresh research runs"} className="grid min-h-11 w-11 place-items-center rounded-lg border border-border-pg disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden /></button>
-              <button type="button" aria-expanded={showForm} aria-controls="research-create-form" disabled={submitting} onClick={() => setShowForm(value => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border-pg-strong bg-text-pg px-4 text-sm font-medium text-bg-app disabled:opacity-50">{showForm ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}{showForm ? (zh ? "收起" : "Close") : (zh ? "新建研究任务" : "New research run")}</button>
-            </div>
-          </div>
+    <section className="research-workspace mx-auto w-full max-w-[1180px]" aria-labelledby="research-heading">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0 flex-1 basis-60">
+          <h1 id="research-heading" className="pg-page-title flex items-center gap-3 text-2xl font-semibold tracking-tight md:text-[1.875rem]">
+            <FlaskConical className="h-6 w-6 shrink-0 text-accent" aria-hidden />
+            {zh ? "研究任务" : "Research"}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-pg-muted">{zh ? "提出问题，追溯证据，保存你的研究结论。" : "Investigate a question, follow the evidence, and keep your findings together."}</p>
+        </div>
+        {state.status === "available" ? <div className="flex items-center gap-2">
+          <Button type="button" variant="secondary" onClick={() => void refresh()} disabled={refreshing} aria-label={zh ? "刷新研究任务" : "Refresh research runs"} className="w-11 !px-0"><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden /></Button>
+          <Button type="button" aria-expanded={showForm} aria-controls="research-create-form" disabled={submitting} onClick={() => setShowForm(value => !value)}>
+            {showForm ? <X className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+            {showForm ? (zh ? "收起" : "Close") : (zh ? "新建研究任务" : "New research run")}
+          </Button>
+        </div> : null}
+      </header>
+      <CapabilityGate state={state} locale={locale} title={zh ? "深度研究暂不可用" : "Deep research is not available yet"} onRetry={() => void refresh()}>
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-text-pg-muted">
+          <span><strong className="font-semibold tabular-nums text-text-pg">{total}</strong> {zh ? "个研究任务" : "research runs"}</span>
+          <span className="inline-flex items-center gap-2"><span aria-hidden className={`h-1.5 w-1.5 rounded-full ${activeCount ? "bg-accent" : "bg-border-pg-strong"}`} /><strong className="font-semibold tabular-nums text-text-pg">{activeCount}</strong> {zh ? "个进行中（当前列表）" : "active in this list"}</span>
+        </div>
           {showForm ? <form id="research-create-form" onSubmit={event => void submit(event)} className="mb-6 space-y-4 rounded-xl border border-border-pg bg-bg-panel p-4 md:p-5">
             <div><h2 className="font-semibold">{zh ? "你想弄清楚什么？" : "What would you like to understand?"}</h2><p className="mt-1 text-xs leading-5 text-text-pg-muted">{zh ? "说明标的、时间范围和需要验证的假设，让研究更有针对性。" : "Include an asset, a time horizon, and a hypothesis to make the research focused."}</p></div>
             <label className="block text-sm font-medium" htmlFor="research-question">{zh ? "研究问题" : "Research question"}<textarea ref={questionRef} id="research-question" value={prompt} maxLength={4000} required onChange={event => setPrompt(event.target.value)} rows={4} disabled={submitting} aria-describedby="research-question-hint" placeholder={zh ? "例如：近90天BTC资金费率与价格偏离的关系，哪些证据支持或反对？" : "For example: what evidence supports or challenges a link between BTC funding rates and price over the last 90 days?"} className="mt-2 block w-full rounded-lg border border-border-pg bg-bg-app px-3 py-3 text-base font-normal leading-6 text-text-pg placeholder:text-text-pg-dim focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" /></label>
@@ -144,14 +151,32 @@ export function ResearchConsole({ locale }: { locale: Locale }) {
             <label className="block text-sm font-medium" htmlFor="research-name">{zh ? "任务名称（可选）" : "Run name (optional)"}<input id="research-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={submitting} className="mt-2 block min-h-11 w-full rounded-lg border border-border-pg bg-bg-app px-3 py-2 font-normal" /></label>
             <fieldset><legend className="mb-2 text-sm font-medium">{zh ? "证据来源 · 至少选择一个" : "Evidence sources · choose at least one"}</legend><div className="flex flex-wrap gap-2">{DATA_SOURCES.map(source => <button key={source.id} type="button" disabled={submitting} aria-pressed={sources.includes(source.id)} onClick={() => setSources(previous => previous.includes(source.id) ? previous.filter(id => id !== source.id) : [...previous, source.id])} className={`min-h-11 rounded-lg border px-3 text-sm ${sources.includes(source.id) ? "border-border-pg-strong bg-bg-panel-muted text-text-pg" : "border-border-pg text-text-pg-muted"}`}>{zh ? source.zh : source.en}</button>)}</div></fieldset>
             {formError ? <p role="alert" className="rounded-lg border border-status-negative/40 p-3 text-sm text-status-negative">{formError}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-pg pt-4"><p className="max-w-md text-xs leading-5 text-text-pg-muted">{zh ? "任务与积分额度由你的套餐决定。创建失败时问题会保留。" : "Your plan determines run and credit limits. Your question stays here if creation fails."}</p><button type="submit" disabled={submitting || !prompt.trim() || !sources.length} className="min-h-11 rounded-lg border border-border-pg-strong bg-text-pg px-5 text-sm font-medium text-bg-app disabled:opacity-40">{submitting ? (zh ? "创建中…" : "Creating…") : (zh ? "开始研究" : "Start research")}</button></div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-pg pt-4"><p className="max-w-md text-xs leading-5 text-text-pg-muted">{zh ? "任务与积分额度由你的套餐决定。创建失败时问题会保留。" : "Your plan determines run and credit limits. Your question stays here if creation fails."}</p><Button type="submit" disabled={submitting || !prompt.trim() || !sources.length} className="px-5">{submitting ? (zh ? "创建中…" : "Creating…") : (zh ? "开始研究" : "Start research")}</Button></div>
           </form> : null}
           {refreshError ? <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-status-warning/40 p-3 text-sm text-status-warning"><span>{zh ? "无法刷新，正在显示上次加载的任务。" : "Refresh failed. Showing the last loaded runs."}</span><button type="button" disabled={refreshing} onClick={() => void refresh()} className="min-h-10 underline underline-offset-4">{zh ? "重试" : "Retry"}</button></div> : null}
-          <div className="mb-4 flex flex-wrap items-center gap-3"><label className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-text-pg-dim" aria-hidden /><span className="sr-only">{zh ? "搜索已加载的研究任务" : "Search loaded research runs"}</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder={zh ? "搜索已加载的研究任务" : "Search loaded research runs"} className="min-h-11 w-full rounded-lg border border-border-pg bg-bg-panel pl-9 pr-3 text-sm" /></label><label><span className="sr-only">{zh ? "筛选任务状态" : "Filter run status"}</span><select value={filter} onChange={event => setFilter(event.target.value)} className="min-h-11 max-w-full rounded-lg border border-border-pg bg-bg-panel px-3 text-sm"><option value="all">{zh ? "全部状态" : "All statuses"}</option><option value="active">{zh ? "进行中" : "In progress"}</option><option value="completed">{zh ? "已完成" : "Completed"}</option><option value="stopped">{zh ? "失败或取消" : "Failed or canceled"}</option></select></label></div>
-          {lastRefresh ? <p role="status" className="mb-3 text-xs text-text-pg-dim">{zh ? `当前列表 ${matching.length}/${runs.length} 项 · 更新于 ` : `${matching.length} of ${runs.length} loaded runs · Updated `}{formatTime(lastRefresh, locale)}{total > runs.length ? (zh ? " · 仅搜索当前加载的最近任务" : " · Search covers the recent runs loaded here") : ""}</p> : null}
-          {matching.length ? <ul className="space-y-3" aria-label={zh ? "研究任务列表" : "Research runs"}>{matching.map(run => <li key={run.id}><Link href={withLocale(locale, `/research/${encodeURIComponent(run.id)}`)} className="group block rounded-xl border border-border-pg bg-bg-panel p-4 transition hover:border-border-pg-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="break-words text-base font-semibold text-text-pg">{run.name || (zh ? "未命名研究" : "Untitled research")}</h2>{run.summary ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-pg-muted">{run.summary}</p> : null}</div><ArrowRight className="mt-1 h-4 w-4 shrink-0 text-text-pg-dim transition group-hover:translate-x-0.5" aria-hidden /></div><div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-text-pg-dim"><StatusBadgeWithPulse domain="research" value={run.status} locale={locale} /><span className="inline-flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" aria-hidden />{formatTime(run.updated_at, locale)}</span><span className="inline-flex items-center gap-1"><Database className="h-3.5 w-3.5" aria-hidden />{run.data_sources?.length ?? 0} {zh ? "来源" : "sources"}</span><span className="inline-flex items-center gap-1"><FileSearch className="h-3.5 w-3.5" aria-hidden />{run.evidence_count ?? 0} {zh ? "证据" : "evidence"}</span></div></Link></li>)}</ul> : <div className="rounded-xl border border-dashed border-border-pg bg-bg-panel p-8 text-center"><FileSearch className="mx-auto h-7 w-7 text-text-pg-dim" aria-hidden /><h2 className="mt-3 font-semibold">{runs.length ? (zh ? "没有符合条件的任务" : "No matching runs") : (zh ? "从一个好问题开始。" : "Start with a good question.")}</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-pg-muted">{runs.length ? (zh ? "试试其他关键词或状态筛选。" : "Try another search or status filter.") : (zh ? "新建研究任务，记录假设、收集证据并跟踪结论。" : "Create a research run to investigate a hypothesis, collect evidence, and keep your findings together.")}</p><button type="button" onClick={() => { if (runs.length) { setQuery(""); setFilter("all"); } else setShowForm(true); }} className="mt-4 min-h-11 rounded-lg border border-border-pg px-4 text-sm font-medium">{runs.length ? (zh ? "清除筛选" : "Clear filters") : (zh ? "创建第一个任务" : "Create your first run")}</button></div>}
-        </CapabilityGate>
-      </div>
-    </OceanShell>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <label className="relative min-w-0 flex-1 basis-44"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-text-pg-dim" aria-hidden /><span className="sr-only">{zh ? "搜索已加载的研究任务" : "Search loaded research runs"}</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder={zh ? "搜索研究任务" : "Search research runs"} className="pg-input min-h-11 w-full rounded-lg border border-border-pg bg-bg-panel pl-9 pr-3 text-sm" /></label>
+          <label className="min-w-0"><span className="sr-only">{zh ? "筛选任务状态" : "Filter run status"}</span><select value={filter} onChange={event => setFilter(event.target.value)} className="pg-input min-h-11 max-w-full rounded-lg border border-border-pg bg-bg-panel px-3 text-sm"><option value="all">{zh ? "全部状态" : "All statuses"}</option><option value="active">{zh ? "进行中" : "In progress"}</option><option value="completed">{zh ? "已完成" : "Completed"}</option><option value="stopped">{zh ? "失败或取消" : "Failed or canceled"}</option></select></label>
+        </div>
+        {lastRefresh ? <p role="status" className="mb-3 text-xs leading-5 text-text-pg-dim">{zh ? `当前列表 ${matching.length}/${runs.length} 项 · 更新于 ` : `${matching.length} of ${runs.length} loaded runs · Updated `}{formatTime(lastRefresh, locale)}{total > runs.length ? (zh ? " · 仅搜索当前加载的最近任务" : " · Search covers the recent runs loaded here") : ""}</p> : null}
+        {matching.length ? <ul className="divide-y divide-border-pg overflow-hidden rounded-xl border border-border-pg bg-bg-panel" aria-label={zh ? "研究任务列表" : "Research runs"}>
+          {matching.map(run => <li key={run.id}>
+            <Link href={withLocale(locale, `/research/${encodeURIComponent(run.id)}`)} className="group block px-4 py-4 transition-colors hover:bg-bg-panel-muted focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1"><h2 className="break-words text-[0.9375rem] font-semibold leading-6 text-text-pg">{run.name || (zh ? "未命名研究" : "Untitled research")}</h2>{run.summary ? <p className="mt-1 line-clamp-2 max-w-3xl text-sm leading-6 text-text-pg-muted">{run.summary}</p> : null}</div>
+                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-text-pg-dim transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-pg-dim">
+                <StatusBadgeWithPulse domain="research" value={run.status} locale={locale} />
+                <span className="inline-flex items-center gap-1.5"><CalendarClock className="h-3.5 w-3.5" aria-hidden /><time dateTime={run.updated_at}>{formatTime(run.updated_at, locale)}</time></span>
+                <span className="inline-flex items-center gap-1.5"><Database className="h-3.5 w-3.5" aria-hidden />{Array.isArray(run.data_sources) ? `${run.data_sources.length} ${zh ? "来源" : "sources"}` : (zh ? "来源未记录" : "Sources not recorded")}</span>
+                <span className="inline-flex items-center gap-1.5"><FileSearch className="h-3.5 w-3.5" aria-hidden />{typeof run.evidence_count === "number" ? `${run.evidence_count} ${zh ? "证据" : "evidence"}` : (zh ? "证据数量未记录" : "Evidence count not recorded")}</span>
+              </div>
+            </Link>
+          </li>)}
+        </ul> : <div className="rounded-xl border border-dashed border-border-pg bg-bg-panel px-5 py-10 text-center"><FileSearch className="mx-auto h-7 w-7 text-text-pg-dim" aria-hidden /><h2 className="mt-3 font-semibold">{runs.length ? (zh ? "没有符合条件的任务" : "No matching runs") : (zh ? "从一个好问题开始。" : "Start with a good question.")}</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-pg-muted">{runs.length ? (zh ? "试试其他关键词或状态筛选。" : "Try another search or status filter.") : (zh ? "新建研究任务，记录假设、收集证据并跟踪结论。" : "Create a research run to investigate a hypothesis, collect evidence, and keep your findings together.")}</p><Button type="button" variant="secondary" onClick={() => { if (runs.length) { setQuery(""); setFilter("all"); } else setShowForm(true); }} className="mt-4">{runs.length ? (zh ? "清除筛选" : "Clear filters") : (zh ? "创建第一个任务" : "Create your first run")}</Button></div>}
+      </CapabilityGate>
+    </section>
   );
 }

@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={clsx("border border-border-pg bg-bg-panel p-4 rounded-xl", className)}>{children}</section>;
+  return <section className={clsx("pg-card", className)}>{children}</section>;
 }
 
 export function Button({
@@ -14,10 +14,10 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex min-h-11 items-center justify-center gap-2 border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 rounded-lg",
-        variant === "primary" && "border-border-pg-strong bg-[var(--pg-surface-inverse)] text-[var(--pg-text-inverse)] hover:opacity-90",
-        variant === "secondary" && "border-border-pg bg-bg-panel-muted text-text-pg hover:border-border-pg-strong",
-        variant === "danger" && "border-border-pg-strong bg-bg-panel text-status-negative hover:border-border-pg-strong",
+        "pg-button",
+        variant === "primary" && "pg-button-primary",
+        variant === "secondary" && "pg-button-secondary",
+        variant === "danger" && "pg-button-danger",
         className
       )}
       {...props}
@@ -28,19 +28,19 @@ export function Button({
 }
 
 export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={clsx("min-h-11 w-full border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg placeholder:text-text-pg-dim focus:border-border-pg-strong rounded-lg", className)} {...props} />;
+  return <input className={clsx("pg-input", className)} {...props} />;
 }
 
 export function Select({ className = "", children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={clsx("min-h-11 w-full border border-border-pg bg-bg-panel-muted px-3 py-2 text-sm text-text-pg focus:border-border-pg-strong rounded-lg", className)} {...props}>{children}</select>;
+  return <select className={clsx("pg-input", className)} {...props}>{children}</select>;
 }
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block text-text-pg-muted">{label}</span>
+      <span className="mb-2 block font-medium text-text-pg">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-text-pg-dim">{hint}</span> : null}
+      {hint ? <span className="pg-metadata mt-2 block">{hint}</span> : null}
     </label>
   );
 }
@@ -49,11 +49,11 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   return (
     <span
       className={clsx(
-        "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
-        tone === "neutral" && "border-border-pg bg-bg-panel-muted text-text-pg-muted",
-        tone === "positive" && "border-border-pg bg-bg-panel text-status-positive",
-        tone === "warning" && "border-border-pg bg-bg-panel text-status-warning",
-        tone === "danger" && "border-border-pg bg-bg-panel text-status-negative"
+        "pg-badge",
+        tone === "neutral" && "bg-bg-panel-muted text-text-pg-muted",
+        tone === "positive" && "bg-[var(--pg-positive-soft)] text-status-positive",
+        tone === "warning" && "bg-[var(--pg-warning-soft)] text-status-warning",
+        tone === "danger" && "bg-[var(--pg-danger-soft)] text-status-negative"
       )}
     >
       {children}
@@ -63,9 +63,9 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
 
 export function SectionTitle({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-      <h1 className="text-xl font-semibold tracking-normal">{title}</h1>
-      {meta ? <span className="text-sm text-text-pg-muted">{meta}</span> : null}
+    <div className="pg-page-header flex flex-wrap items-center justify-between gap-3">
+      <h1 className="pg-page-title">{title}</h1>
+      {meta ? <span className="pg-metadata">{meta}</span> : null}
     </div>
   );
 }

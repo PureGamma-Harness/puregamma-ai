@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { AgentChat } from "@/components/agent-chat";
-import { ChronoSlices, ChronoSlice } from "@/components/chrono/chrono-slices";
 import { isLocale, type Locale } from "@/i18n/routing";
-import { IntelligenceShell } from "@/components/terminal/intelligence-shell";
 
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
@@ -11,17 +9,12 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
   return { title: zh ? "Agent 对话 | PureGamma AI" : "Agent Chat | PureGamma AI", description: zh ? "与研究 Agent 对话：策略、事件、风险与投资笔记。" : "Chat with your research Agent about strategies, events, risk, and notes." };
 }
 
-export default async function ChatPage({ params: paramsPromise, searchParams }: { params: Promise<{ locale: Locale }>; searchParams: Promise<{ topic?: string | string[] }> }) {
+export default async function ChatPage({ params: paramsPromise, searchParams }: { params: Promise<{ locale: Locale }>; searchParams: Promise<{ topic?: string | string[]; prompt?: string | string[] }> }) {
   const params = await paramsPromise;
-  const topic = (await searchParams).topic;
-  const initialPrompt = typeof topic === "string" ? Array.from(topic.trim()).slice(0, 4000).join("") : "";
-  return (
-    <ChronoSlices>
-      <ChronoSlice>
-        <IntelligenceShell compact eyebrow={params.locale === "zh" ? "Reason" : "Reason"} title={params.locale === "zh" ? "与 Agent 共同推理。" : "Reason with your Agent."} byline={params.locale === "zh" ? "围绕策略、事件与风险的持续推理对象。" : "A continuously updating counterpart for strategies, events and risk."}>
-          <AgentChat locale={params.locale} initialPrompt={initialPrompt} />
-        </IntelligenceShell>
-      </ChronoSlice>
-    </ChronoSlices>
-  );
+  const query = await searchParams;
+  // Preserve the canonical topic even when blank or invalid. The old dashboard
+  // spelling is a fallback only when topic is absent, never an automatic send.
+  const seed = query.topic === undefined ? query.prompt : query.topic;
+  const initialPrompt = typeof seed === "string" ? Array.from(seed.trim()).slice(0, 4000).join("") : "";
+  return <AgentChat locale={params.locale} initialPrompt={initialPrompt} />;
 }
