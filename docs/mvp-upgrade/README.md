@@ -38,6 +38,9 @@ whole-route health and mutation journeys as separate evidence.
 | Chart reliability | [Charts](chart-reliability.md) | Announced loading/error, retry, per-attempt canvas ownership and bounded preview of actual supplied values |
 | Provider status | [Data sources](data-source-status.md) | Preserve server availability and distinguish empty, unauthorized and failed reads without enabling a provider |
 | Static first paint | [SSR and hydration](hydration-recovery.md) | Real setup headings, progress and controls directly inside server-rendered main; preserve page-owned loading and error recovery |
+| Shared runtime | [Hydration boundary](runtime-hydration.md), [browser validation](runtime-validation.md), [independent review](runtime-browser-review.md), [streamed workspace](streamed-workspace-locators.md) | Isolate delayed page modules from navigation while retaining one main landmark and real static setup content; scope browser interactions to their accessible workspace |
+| Harness runtimes | [Node compatibility](harness-node-runtime.md) | Preserve compilation and policy checks across Node 22/24 with the native configuration loader and both CI jobs |
+| Site dependencies | [Scoped hardening](site-dependency-hardening.md) | Patch three affected tool consumers, verify actual loaders/fonts/globs and enforce a moderate-severity audit gate |
 | Route recovery | [Scoped recovery](route-recovery.md) | Renderable admin errors, daily settings recovery with Next control signals preserved, single API/advisory main landmarks |
 | Legacy navigation | [Query preservation](legacy-query-preservation.md) | Preserve repeated, empty and Unicode query values across all locale aliases without changing API handling or release gates |
 | Layout containment | [Route geometry](route-geometry.md) | Contain secretary artwork and wrap long backtest errors at desktop/mobile widths |
@@ -55,10 +58,45 @@ navigation, research and financial-operation journeys, then whole-route health.
 A separate job builds with the unchanged default launch policy and tests its
 redirect gates. Test configuration is not a production flag change.
 
-The route-health suite has 228 discovered cases per mode; the full mode includes
-216 canonical visits across both locales and viewports. Actual pass counts and
-any fixture corrections are recorded only after the final integrated artifacts
-run. A scoped unavailable state is distinct from a working external provider.
+The route-health suite has 238 discovered cases per mode, including eight
+populated layout checks and two transport-isolation cases added after the
+original 228-case audit. Full mode has
+216 canonical visits, 14 auxiliary cases and eight geometry cases. Default
+launch mode has 148 canonical browser visits, 68 release-gate checks and the
+same auxiliary/geometry cases. Focused workflow discovery totals 96 cases:
+14 upgrade, 10 foundation, 20 authentication, 30 research and 22 operations.
+Actual execution results remain separate from discovery. A scoped unavailable
+state is distinct from a working external provider.
+
+The final frozen runtime follow-up passed local full routes 238/238. Fresh
+[Web CI](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43461686491)
+passed 96 focused journeys, 59 Node checks, five separately copied-runtime
+checks, 26 real React checks and both full/default-launch route modes 238/238
+on attempt 1. Fresh
+[API CI](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43461686233)
+passed 1525 tests plus eight Relay checks, with four existing expected failures
+and one opt-in load skip. Independent review verified all three final
+test/fixture blobs before [PR #58](https://github.com/PureGamma-Harness/puregamma-ai/pull/58)
+merged as `38b5eea3d506a8ca992a95b714605028d29a57bf`. PR #56's rendering/layout
+repair, bounded Chromium 149/156 repetitions, visual checks and historical
+failures are recorded separately in the runtime briefs. The independent
+default-push [Web](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43463254218)
+and [API](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43463254173)
+checks are separate executions of the merged runtime.
+
+[PR #59](https://github.com/PureGamma-Harness/puregamma-ai/pull/59) separately
+patches three site-tool advisories. Fresh
+[Site CI](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43459604381)
+passed both Node 22/24 jobs on attempt 1: clean install, zero audit findings,
+type/lint/build, 19 full-tree tests and a separate production-only install with
+one real image-runtime test. Independent review rejected an intermediate lock
+that omitted native production dependencies; the approved version preserves
+their original metadata and rejects host-global library fallbacks. The checked
+Web/Harness dependency snapshots and current API environment also audited clean.
+GitHub alert details return 403 for the current integration, so these audits do
+not establish closure of specific GitHub alert records.
+The separate [default-branch Site run](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43460124436)
+also passed both jobs on attempt 1; its merge tree matches the approved test tree.
 
 The first frozen full-mode audit ran all 228 cases and exposed alias query loss,
 admin error rendering, missing daily settings recovery, duplicate main landmarks
@@ -66,13 +104,19 @@ and two layout overflows. Those findings have explicit repairs and independent
 reviews. A Chinese embedded-docs shell needs a dedicated semantic check instead
 of an arbitrary English-oriented text-length threshold. Native navigation
 acceptance also exposed recurrent hydration errors in onboarding and Options
-history. The final design removes the newly added locale-wide loading boundary
-and restores direct server rendering of static setup content. A positive inert
-HTML regression checks actual main descendants before application scripts run;
-page-owned loading and shared error recovery remain. Internal React host
-attribution was not captured, so the repair claims the proved SSR contract and
-requires unchanged normal navigation/error checks and fresh CI. Initial failures
-and diagnostic results remain separate from final acceptance evidence.
+history. Removing the newly added locale-wide loading boundary restored direct
+server rendering of setup content, but later ordinary and hosted runs still
+reproduced the hydration error. The follow-up captured the shared main host and
+its already-entered first-child cursor after an existing failure. A controlled
+delayed page-module response also demonstrated blocked mobile navigation.
+The revised structure keeps a permanent main and isolates page children inside
+their own hydration boundary. Its server fallback retains real content, while
+client recovery uses local loading feedback. Unchanged inert-HTML checks still
+require actual headings, progress and controls before scripts run. The new
+delayed-module regression requires shared controls to work before the original
+feature response is released. Original failures, diagnostic evidence, ordinary
+acceptance and fresh hosted CI remain distinct; no retry or filtered error
+assertion constitutes the repair.
 
 Backend source was frozen for a full 1523-pass regression with four pre-existing
 expected failures and one opt-in load skip. A later one-line citation-parser
