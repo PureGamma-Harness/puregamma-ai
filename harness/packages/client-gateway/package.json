@@ -23,7 +23,7 @@
     "lib/typert.remote-client.d.ts"
   ],
   "scripts": {
-    "bundle": "tsc -p tsconfig.json && tsdown --config-loader tsx"
+    "bundle": "tsc -p tsconfig.json && tsdown"
   },
   "dependencies": {
     "@puregamma/dsh-auth": "workspace:^",
