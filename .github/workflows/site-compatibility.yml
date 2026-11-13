@@ -49,4 +49,4 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm ci --omit=dev
-      - run: node --test tests/production-runtime.test.mjs
+      - run: NODE_PATH= node --test tests/production-runtime.test.mjs

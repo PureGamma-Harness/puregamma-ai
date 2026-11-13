@@ -65,9 +65,9 @@ production-only installations in both runtimes.
 | Existing CSS/rendered Worker checks, four consumer regressions and image-runtime check | 19/19 | 19/19 |
 | Separate cold production-only Next → Sharp PNG processing | 1/1 | 1/1 |
 
-Full and production-only npm audits both report zero vulnerabilities. The full
-lock metadata covers 692 package entries, including other-platform optional
-packages; that count does not mean all entries ship in production. A first lint
+Full and production-only npm audits both report zero vulnerabilities. The audit
+metadata reports 692 dependencies, including other-platform optional packages;
+that count does not mean all entries ship in production. A first lint
 run rejected a test-local variable named `module`; renaming it to `loaded`
 resolved the existing Next lint rule without changing or disabling the rule.
 
@@ -82,7 +82,13 @@ The existing Node 22/24 `Site compatibility` workflow now also requires
 the full suite, it installs with `npm ci --omit=dev` and runs only the independent
 image-runtime test. The test resolves Sharp through Next and encodes/decodes a
 real PNG, so a successful development build cannot conceal missing native
-production packages. The first candidate's red production regression and the
+production packages. The isolated production command clears `NODE_PATH`; the
+test also requires the real Next entry, Sharp entry and loaded native binding
+to belong to the selected runtime's own `node_modules`. Independent validation
+demonstrated that an ambient global module path could otherwise make the broken
+candidate borrow the host's Sharp binary and falsely pass. The strengthened
+test rejects that case even with the ambient path present. The first
+candidate's red production regression and the
 corrected lock's green result are retained separately. Merge
 acceptance requires both fresh hosted matrix jobs and an independent review of
 the frozen source/lock, recorded in the implementation pull request's Checks
