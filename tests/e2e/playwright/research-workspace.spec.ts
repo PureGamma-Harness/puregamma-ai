@@ -84,6 +84,12 @@ const test = base.extend<{ backend: Backend; errors: string[] }>({
 
 async function noOverflow(page: Page) { expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1); }
 
+function chatComposer(page: Page) {
+  // Fizz may temporarily stage a second copy outside the rendered landmark.
+  // Keep strict matching within the workspace the user can interact with.
+  return page.getByRole("main").getByTestId("chat-composer-input");
+}
+
 test("research loading failures remain distinct from an empty list and retry once", async ({ page, backend, errors }) => {
   let calls = 0;
   backend.handlers.set("GET /api/research/runs", () => ++calls === 1 ? { status: 503, body: { detail: "Unavailable" } } : { body: { runs: [run], total: 1 } });
@@ -204,7 +210,7 @@ test("failed history deletion preserves the conversation and remains visible", a
   backend.handlers.set("DELETE /api/agent/conversations/c1", () => ({ status: 503, body: { detail: "Unavailable" } }));
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/en/chat");
-  await expect(page.getByTestId("chat-composer-input")).toBeEnabled();
+  await expect(chatComposer(page)).toBeEnabled();
   if ((page.viewportSize()?.width || 0) < 1024) await page.getByTestId("chat-history-trigger").click();
   const remove = page.getByRole("button", { name: "Delete conversation: Primary research", exact: true });
   await remove.focus(); await expect(remove).toBeFocused(); await expect(remove).toBeVisible(); await remove.click();
@@ -217,7 +223,7 @@ test("a pre-stream send failure restores a draft without automatic replay", asyn
   let sends = 0;
   backend.handlers.set("POST /api/agent/conversations/c1/messages", () => { sends += 1; return { status: 503, body: { detail: "Unavailable" } }; });
   await page.goto("/en/chat?topic=Compare%20BTC%20funding%20sources");
-  const composer = page.getByTestId("chat-composer-input");
+  const composer = chatComposer(page);
   await expect(composer).toBeEnabled(); await expect(composer).toHaveValue("Compare BTC funding sources");
   await composer.press("Enter");
   await expect(page.getByTestId("chat-error")).toBeVisible();
@@ -245,8 +251,8 @@ test("late news filters cannot replace current evidence and topics open editable
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await expect(page.getByRole("heading", { name: "Old BTC headline", exact: true })).toHaveCount(0);
     await page.getByRole("link", { name: "Ask Agent", exact: true }).first().click();
-    await expect(page.getByTestId("chat-composer-input")).toBeEnabled();
-    await expect(page.getByTestId("chat-composer-input")).toHaveValue("Current ETH headline");
+    await expect(chatComposer(page)).toBeEnabled();
+    await expect(chatComposer(page)).toHaveValue("Current ETH headline");
     expect(backend.reads.filter(read => read.method === "POST" && read.path.endsWith("/messages"))).toHaveLength(0);
     await noOverflow(page); expect(errors).toEqual([]);
   } finally { release?.(); }
@@ -277,7 +283,7 @@ test("stopping a stream is immediate and its late cancellation cannot clear a ne
   });
   try {
     await page.goto("/en/chat");
-    const composer = page.getByTestId("chat-composer-input");
+    const composer = chatComposer(page);
     await expect(composer).toBeEnabled(); await composer.fill("First question"); await composer.press("Enter");
     await expect(page.getByText("First stream is active", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Stop generation", exact: true }).click();
@@ -305,7 +311,7 @@ test("a history refresh failure cannot overwrite the run's authoritative refund"
     body: 'event: run.started\ndata: {"runId":"failed-run","messageId":"failed-answer"}\n\nevent: run.failed\ndata: {"messageId":"failed-answer","code":"PROVIDER_ERROR","message":"Provider unavailable","creditBalance":100}\n\n',
   }));
   await page.goto("/en/chat");
-  const composer = page.getByTestId("chat-composer-input");
+  const composer = chatComposer(page);
   await expect(composer).toBeEnabled(); await composer.fill("A failed provider request"); await composer.press("Enter");
   await expect(page.getByTestId("chat-error-billing")).toHaveAttribute("data-billing", "refunded");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
@@ -348,7 +354,7 @@ test("Stop cancels pending permission setup before any chargeable message starts
   backend.handlers.set("PATCH /api/agent/conversations/c1", async () => { await new Promise<void>(resolve => { release = resolve; }); return { body: { conversation } }; });
   try {
     await page.goto("/en/chat");
-    const composer = page.getByTestId("chat-composer-input");
+    const composer = chatComposer(page);
     await expect(composer).toBeEnabled(); await composer.fill("Keep this canceled draft"); await composer.press("Enter");
     await expect.poll(() => !!release).toBe(true);
     await page.getByRole("button", { name: "Stop generation", exact: true }).click();

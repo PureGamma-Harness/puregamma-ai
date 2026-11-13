@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 import { readdirSync } from "node:fs";
 import { resolve, relative, sep } from "node:path";
 import { test as base } from "@playwright/test";
@@ -47,7 +47,7 @@ export function routeUrl(route: AppRoute, locale: "en" | "zh"): string {
     .replace("[strategyId]", OWNED_STRATEGY_ID);
 }
 
-type BackendRead = { method: string; path: string; status: number; session: boolean; transport: "browser" | "server" };
+type BackendRead = { method: string; path: string; status: number; session: boolean; transport: "browser" | "server"; connectionId: number };
 type AuditBackend = { origin: string; authority: string; requests: BackendRead[] };
 
 const created = "2026-11-08T00:00:00Z";
@@ -65,7 +65,14 @@ function endpoint(path: string) {
 export const test = base.extend<{}, { auditBackend: AuditBackend }>({
   auditBackend: [async ({}, use) => {
     const requests: BackendRead[] = [];
+    const connections = new WeakMap<Socket, number>();
+    let connectionSequence = 0;
     const server = createServer((request, response) => {
+      let connectionId = connections.get(request.socket);
+      if (connectionId === undefined) {
+        connectionId = ++connectionSequence;
+        connections.set(request.socket, connectionId);
+      }
       const url = new URL(request.url || "/", "http://127.0.0.1");
       const path = endpoint(url.pathname);
       const method = request.method || "GET";
@@ -88,8 +95,10 @@ export const test = base.extend<{}, { auditBackend: AuditBackend }>({
       else if (path === `/research/runs/${OWNED_RESEARCH_ID}/evidence`) { status = 200; body = { evidence: [], total: 0 }; }
       else if (path === `/research/runs/${OWNED_RESEARCH_ID}/artifacts`) { status = 200; body = { artifacts: [] }; }
       else if (path.startsWith("/research/runs/")) { status = 404; body = { detail: "Research run not found in this synthetic owner's scope." }; }
-      requests.push({ method, path, status, session, transport: request.headers["x-route-audit-transport"] === "browser" ? "browser" : "server" });
-      response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      requests.push({ method, path, status, session, transport: request.headers["x-route-audit-transport"] === "browser" ? "browser" : "server", connectionId });
+      // End each fixture connection after its complete response so Playwright's
+      // shared HTTP agent cannot reuse idle sockets across request contexts.
+      response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", "Connection": "close" });
       response.end(JSON.stringify(body));
     });
     await new Promise<void>((done, fail) => { server.once("error", fail); server.listen(0, "127.0.0.1", done); });
