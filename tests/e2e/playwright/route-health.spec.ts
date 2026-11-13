@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { test, routes, canonical, aliases, isHidden, localPattern, mode, routeUrl, SESSION } from "./route-health-fixtures";
 
 const failures = new WeakMap<Page, { errors: string[]; blocked: string[] }>();
@@ -153,6 +153,109 @@ for (const path of ["/privacy", "/terms"]) {
     const response = await page.goto(path);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
+    expect(failures.get(page)!.errors).toEqual([]);
+  });
+}
+
+async function expectPageWidth(page: Page) {
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+}
+
+async function expectInside(container: Locator, contents: Locator) {
+  expect(await contents.count()).toBeGreaterThan(0);
+  for (const item of await contents.all()) {
+    await expect(item).toBeVisible();
+    // Recharts responds to viewport changes through ResizeObserver. Re-read
+    // both boxes until that layout has settled instead of racing one frame.
+    await expect(async () => {
+      const parent = await container.boundingBox();
+      const box = await item.boundingBox();
+      expect(parent).not.toBeNull();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThan(0);
+      expect(box!.x).toBeGreaterThanOrEqual(parent!.x - 1);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(parent!.x + parent!.width + 1);
+    }).toPass({ timeout: 12_000 });
+  }
+}
+
+for (const locale of ["en", "zh"] as const) {
+  test(`responsive gateway controls and populated charts /${locale}`, async ({ page, auditBackend }, info) => {
+    const start = auditBackend.requests.length;
+    const usageReads: URL[] = [];
+    // The baseline route audit exercises unavailable APIs. Also cover the
+    // populated chart grid without contacting a provider or invoking writes.
+    const totals = { requests: 2, success: 2, errors: 0, input_tokens: 10, output_tokens: 5, cache_tokens: 0, reasoning_tokens: 0, avg_latency_ms: 100, max_latency_ms: 120, cost_usd: "0.001" };
+    await page.route(/\/api\/admin\/gateway\/usage(?:\?|$)/, (route) => {
+      expect(route.request().method()).toBe("GET");
+      usageReads.push(new URL(route.request().url()));
+      return route.fulfill({ json: { start: "2026-11-01T00:00:00Z", end: "2026-11-02T00:00:00Z", granularity: "day", totals, buckets: [{ bucket: "2026-11-01T00:00:00Z", ...totals }], by_model: [], by_key: [] } });
+    });
+    await page.goto(`/${locale}/admin/gateway`);
+    await page.waitForLoadState("networkidle");
+    const main = page.getByRole("main");
+    await expect(main.locator(".recharts-wrapper")).toHaveCount(4);
+    const dates = main.locator('input[type="date"]');
+    const apply = main.getByRole("button", { name: locale === "zh" ? "应用" : "Apply", exact: true });
+    const widths = info.project.name === "mobile390" ? [320, 360, 390, 430] : [1440];
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expectPageWidth(page);
+      await expectInside(main, dates);
+      await expectInside(main, apply);
+      for (const card of await main.locator("section").all()) {
+        await expectInside(main, card);
+        await expectInside(card, card.getByRole("heading"));
+      }
+      for (const chart of await main.locator(".recharts-wrapper").all()) {
+        await expectInside(chart.locator("xpath=ancestor::section"), chart);
+      }
+    }
+    await dates.nth(0).fill("2026-11-01");
+    await dates.nth(1).fill("2026-11-02");
+    await apply.click();
+    await expect.poll(() => usageReads.some((url) => url.searchParams.get("start")?.startsWith("2026-11-01") && url.searchParams.get("end")?.startsWith("2026-11-02"))).toBe(true);
+    await expect(apply).toBeEnabled();
+    await expectPageWidth(page);
+    expect(auditBackend.requests.slice(start).every((read) => read.method === "GET")).toBe(true);
+    expect(failures.get(page)!.errors).toEqual([]);
+  });
+
+  test(`responsive dashboard activity cards and market tables /${locale}`, async ({ page, auditBackend }) => {
+    const start = auditBackend.requests.length;
+    await page.goto(`/${locale}/dashboard`);
+    await page.waitForLoadState("networkidle");
+    const main = page.getByRole("main");
+    const stream = main.locator(".chrono-decision-stream");
+    const cards = stream.locator("section");
+    await expect(cards).toHaveCount(3);
+    await expect(stream.getByRole("link", { name: /OFFLINE route health conversation/ })).toBeVisible();
+    await expect(stream.getByRole("link", { name: /OFFLINE degraded research/ })).toBeVisible();
+    await expectPageWidth(page);
+    for (const card of await cards.all()) {
+      await expectInside(stream, card);
+      await expectInside(card, card.locator("h2, a, a > span"));
+    }
+    // Wide market data remains reachable by scrolling its own container,
+    // rather than making the document wider or hiding the far columns.
+    const tables = main.locator(".workbench table");
+    await expect(tables).toHaveCount(2);
+    for (const table of await tables.all()) {
+      const scroller = table.locator("..");
+      await expectInside(main, scroller);
+      expect(await scroller.evaluate((element) => getComputedStyle(element).overflowX)).toBe("auto");
+      await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+      await expectInside(scroller, table.locator("thead th:last-child"));
+      await scroller.evaluate((element) => { element.scrollLeft = 0; });
+    }
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await main.getByRole("button", { name: locale === "zh" ? "收起行情列表" : "Collapse market list", exact: true }).click();
+      await expect(tables).toHaveCount(1);
+      await main.getByRole("button", { name: locale === "zh" ? "展开行情列表" : "Expand market list", exact: true }).click();
+      await expect(tables).toHaveCount(2);
+      await expectPageWidth(page);
+    }
+    expect(auditBackend.requests.slice(start).every((read) => read.method === "GET")).toBe(true);
     expect(failures.get(page)!.errors).toEqual([]);
   });
 }

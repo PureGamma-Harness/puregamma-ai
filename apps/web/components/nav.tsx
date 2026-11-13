@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, BookOpen, Bot, BrainCircuit, BriefcaseBusiness, Chrome, Code2, CreditCard, FlaskConical, Gauge, HeartHandshake, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Network, Newspaper, Smartphone, UserRound, X, type LucideIcon } from "lucide-react";
 import { AppearanceControls } from "@/components/appearance-controls";
+import { WorkspaceLoading } from "@/components/workspace-feedback";
 import { PlanBadge, Badge } from "@/components/puregamma";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
@@ -118,6 +119,17 @@ function PluginNavSection({ locale, onNavigate }: { locale: Locale; onNavigate?:
   );
 }
 
+const subscribeToRenderPhase = () => () => {};
+const clientRenderPhase = () => true;
+const serverRenderPhase = () => false;
+
+function MainContentFallback({ children }: { children: ReactNode }) {
+  const client = useSyncExternalStore(subscribeToRenderPhase, clientRenderPhase, serverRenderPhase);
+  // Preserve real, visible content in static documents. During client retries,
+  // the fallback must work without the still-pending page module.
+  return client ? <WorkspaceLoading /> : children;
+}
+
 export function AppShell({ children, locale }: { children: ReactNode; locale: Locale }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pathname = usePathname();
@@ -151,7 +163,12 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
           <TopStatusBar locale={locale} mobileNavOpen={mobileNavOpen} onMenuClick={() => setMobileNavOpen(true)} />
 
             <main id="main-content" tabIndex={-1} className="shell-main mx-auto max-w-[1440px] px-4 py-5 md:px-6">
-              {children}
+              {/* Isolate pending page modules from shared navigation. Keep the
+                  landmark outside the boundary: Fizz may outline even completed
+                  large content into a hidden streamed segment. */}
+              <Suspense fallback={<MainContentFallback>{children}</MainContentFallback>}>
+                {children}
+              </Suspense>
             </main>
           </div>
         </div>

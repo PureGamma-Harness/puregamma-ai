@@ -380,3 +380,87 @@ test("research detail preserves its first confirmed snapshot when the next read 
   expect(reads).toBe(2);
   await noOverflow(page); expect(errors).toEqual([]);
 });
+
+
+test("shared shell controls respond before a delayed memory module arrives", async ({ page, backend, errors }, info) => {
+  let releaseFeature!: () => void;
+  const featureGate = new Promise<void>(resolve => { releaseFeature = resolve; });
+  let featureReleased = false;
+  const memoryReads = () => backend.reads.filter(read => /^\/(?:api\/)?memory(?:\/|$)/.test(read.path));
+  let heldRequests = 0;
+  let featureStatus: number | undefined;
+  let featureUrl = "";
+  let layoutStatus: number | undefined;
+  let layoutFinished = false;
+  let layoutError: string | undefined;
+  const onResponse = (response: import("@playwright/test").Response) => {
+    const path = decodeURIComponent(new URL(response.url()).pathname);
+    if (!/^\/_next\/static\/chunks\/app\/\[locale\]\/layout-[^/]+\.js$/.test(path)) return;
+    layoutStatus = response.status();
+    void response.finished().then(error => {
+      if (error) layoutError = error.message;
+      else layoutFinished = true;
+    }, error => { layoutError = String(error); });
+  };
+  page.on("response", onResponse);
+  await page.route(url => /^\/_next\/static\/chunks\/app\/\[locale\]\/memory\/page-[^/]+\.js$/.test(decodeURIComponent(url.pathname)), async route => {
+    const response = await route.fetch();
+    featureStatus = response.status();
+    featureUrl = route.request().url();
+    heldRequests += 1;
+    await featureGate;
+    // Preserve the original status, headers and bytes; only delivery is held.
+    await route.fulfill({ response });
+  });
+  const mobile = (page.viewportSize()?.width || 0) < 1024;
+  try {
+    const response = await page.goto("/zh/memory", { waitUntil: "commit" });
+    expect(response?.status()).toBe(200);
+    const staticMain = await page.evaluate(html => {
+      const document = new DOMParser().parseFromString(html, "text/html");
+      const heading = document.querySelector("main#main-content h1");
+      return {
+        count: document.querySelectorAll("main").length,
+        heading: heading?.textContent?.trim(),
+        headingHidden: Boolean(heading?.closest("[hidden]")),
+      };
+    }, await response!.text());
+    expect(staticMain).toEqual({ count: 1, heading: "Agent 记忆", headingHidden: false });
+    await expect.poll(() => heldRequests).toBe(1);
+    await expect.poll(() => layoutFinished).toBe(true);
+    expect(featureStatus).toBe(200);
+    expect(layoutStatus).toBe(200);
+    expect(layoutError).toBeUndefined();
+    await expect(page.locator("main")).toHaveCount(1);
+    await expect(page.locator("main#main-content")).toBeVisible();
+    expect(memoryReads()).toHaveLength(0);
+    expect(featureReleased).toBe(false);
+    if (mobile) {
+      await page.getByTestId("nav-menu-button").click();
+      const navigation = page.getByRole("dialog", { name: "主导航", exact: true });
+      await expect(navigation).toBeVisible();
+      await navigation.getByRole("button", { name: "关闭导航", exact: true }).click();
+      await expect(navigation).not.toBeVisible();
+    } else {
+      const appearance = page.getByRole("banner").getByRole("button", { name: "切换为经典外观", exact: true });
+      await expect(appearance).toBeVisible();
+      await appearance.click();
+      await expect(page.locator("html")).toHaveAttribute("data-visual-style", "classic");
+    }
+    expect(featureReleased, "shared controls must finish before the feature response is released").toBe(false);
+    expect(memoryReads()).toHaveLength(0);
+    await expect(page.locator("main")).toHaveCount(1);
+    await info.attach("shell-before-memory-module", { body: JSON.stringify({ staticMain, featureUrl, featureStatus, heldRequests, layoutStatus, layoutFinished, memoryReadsBeforeRelease: memoryReads().length, action: mobile ? "navigation opened and closed" : "appearance changed to classic", featureReleased, errors: [...errors] }), contentType: "application/json" });
+  } finally {
+    featureReleased = true;
+    releaseFeature();
+    page.off("response", onResponse);
+  }
+  await expect(page.getByRole("switch", { name: "短期记忆", exact: true })).toBeEnabled();
+  await expect(page.getByText("暂无待批准的提议。", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toHaveCount(1);
+  await expect(page.locator("main#main-content")).toBeVisible();
+  await expect(page).toHaveURL(/\/zh\/memory$/);
+  await noOverflow(page);
+  expect(errors).toEqual([]);
+});
