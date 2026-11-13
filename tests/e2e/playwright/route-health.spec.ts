@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { test, routes, canonical, aliases, isHidden, localPattern, mode, routeUrl, SESSION } from "./route-health-fixtures";
+import { test, routes, canonical, aliases, isHidden, localPattern, mode, routeUrl, SESSION, OWNED_RESEARCH_ID } from "./route-health-fixtures";
 
 const failures = new WeakMap<Page, { errors: string[]; blocked: string[] }>();
 const genericFailure = /This page could not be loaded|暂时无法加载此页面|Application error: a client-side exception/;
@@ -48,6 +48,31 @@ test("@http server-rendered reads use only the owned loopback fixture", async ({
   const serverReads = auditBackend.requests.slice(start);
   expect(serverReads.map((entry) => entry.path).sort()).toEqual(["/options/earnings-gamma", "/options/long-gamma"]);
   expect(serverReads.every((entry) => entry.session && entry.transport === "server" && entry.method === "GET")).toBe(true);
+});
+
+test("@http owned fixture isolates completed reads across request contexts", async ({ request, context, auditBackend }) => {
+  const start = auditBackend.requests.length;
+  const url = `${auditBackend.origin}/api/api/research/runs?limit=5&offset=0`;
+  const headers = { Cookie: `pg_session=${SESSION}` };
+  const warm = await request.get(url, { headers });
+  expect(warm.status()).toBe(200);
+  const body = await warm.json();
+  expect(body).toMatchObject({ runs: [{ id: OWNED_RESEARCH_ID, status: "degraded", is_degraded: true }], total: 1 });
+  for (const [client, transport] of [[context.request, "browser"], [request, "server"]] as const) {
+    const responses = await Promise.all(Array.from({ length: 6 }, () => client.get(url, {
+      headers: { ...headers, "x-route-audit-transport": transport },
+    })));
+    for (const response of responses) {
+      expect(response.status()).toBe(200);
+      expect(await response.json()).toEqual(body);
+    }
+  }
+  const reads = auditBackend.requests.slice(start);
+  expect(reads).toHaveLength(13);
+  expect(reads.every((read) => read.path === "/research/runs" && read.method === "GET" && read.status === 200 && read.session)).toBe(true);
+  expect(reads.filter((read) => read.transport === "browser")).toHaveLength(6);
+  expect(reads.filter((read) => read.transport === "server")).toHaveLength(7);
+  expect(new Set(reads.map((read) => read.connectionId)).size, "completed fixture responses must not leave reusable sockets shared across request contexts").toBe(reads.length);
 });
 
 for (const entry of canonical) {
