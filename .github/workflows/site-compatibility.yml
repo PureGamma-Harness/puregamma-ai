@@ -48,3 +48,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm ci --omit=dev
+      - run: node --test tests/production-runtime.test.mjs
