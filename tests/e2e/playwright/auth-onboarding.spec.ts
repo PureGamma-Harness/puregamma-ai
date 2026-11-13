@@ -190,7 +190,7 @@ test("@http dashboard destination uses owned server reads and renders unavailabl
       { method: "GET", path: "/api/market/snapshot", session: true, status: 501 },
       { method: "GET", path: "/api/reports", session: true, status: 501 },
     ]);
-    expect(html).toContain(locale === "zh" ? "账户与计费数据暂不可用" : "Account and billing data unavailable");
+    expect(html).toContain(locale === "zh" ? "订阅详情暂不可用" : "Subscription details unavailable");
   }
 });
 

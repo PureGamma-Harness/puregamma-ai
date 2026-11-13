@@ -33,8 +33,9 @@ function clsxLike(visualStyle: VisualStyle, base: string): string {
 /**
  * Theme / appearance controls.
  *
- * Mounted three times (sidebar rail, desktop top bar, mobile top bar). All
- * instances now read one shared store, so they cannot disagree, and the
+ * The desktop header exposes theme/style, the rail exposes text size, and
+ * the mobile drawer exposes both. All instances read one shared store, so
+ * they cannot disagree, and the
  * preference survives a reload because the pre-paint script applies it before
  * first paint. The control is a three-state cycle — System → Light → Dark —
  * because a two-state switch cannot express "follow the OS", which was the
@@ -43,9 +44,11 @@ function clsxLike(visualStyle: VisualStyle, base: string): string {
 export function AppearanceControls({
   locale,
   showFontScale = true,
+  showThemeAndStyle = true,
 }: {
   locale: "en" | "zh";
   showFontScale?: boolean;
+  showThemeAndStyle?: boolean;
 }) {
   const { preference, resolved, fontScale, setPreference, setFontScale } = useAppearance();
   const visualStyle = useSyncExternalStore(subscribeVisualStyle, visualStyleSnapshot, () => DEFAULT_VISUAL_STYLE);
@@ -62,7 +65,7 @@ export function AppearanceControls({
   };
 
   const scaleIndex = SCALES.indexOf(fontScale);
-  const buttonClass = "grid h-10 w-10 place-items-center rounded-lg border border-border-pg hover:border-border-pg-strong disabled:opacity-35";
+  const buttonClass = "grid h-11 w-11 place-items-center rounded-lg text-text-pg-muted transition-colors hover:bg-bg-panel-muted hover:text-text-pg disabled:opacity-35";
 
   const themeTitle =
     preference === "system"
@@ -77,7 +80,7 @@ export function AppearanceControls({
 
   return (
     <div className="flex shrink-0 items-center gap-1" aria-label={locale === "zh" ? "外观设置" : "Appearance settings"}>
-      <button
+      {showThemeAndStyle ? <><button
         className={buttonClass}
         type="button"
         onClick={cycleTheme}
@@ -96,7 +99,7 @@ export function AppearanceControls({
         title={locale === "zh" ? (visualStyle === "glass" ? "切换为经典外观" : "切换为玻璃外观") : visualStyle === "glass" ? "Switch to classic appearance" : "Switch to glass appearance"}
       >
         <Sparkles className="h-3.5 w-3.5" />
-      </button>
+      </button></> : null}
       {showFontScale ? <>
         <button className={buttonClass} type="button" disabled={scaleIndex === 0} onClick={() => setFontScale(SCALES[scaleIndex - 1])} aria-label={locale === "zh" ? "缩小字体" : "Decrease text size"} title={locale === "zh" ? "缩小字体" : "Decrease text size"}>
           <Minus className="h-3.5 w-3.5" />

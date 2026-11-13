@@ -8,7 +8,7 @@ import { resolveChronoTier, useChronoTierReactive, useHtmlDataset } from "@/lib/
  * Scroll "time-slice" narrative for exploration surfaces.
  *
  * Reveals any descendant carrying `data-chrono-slice` (or the class
- * `chrono-slice`) as it scrolls into view: a short opacity + translateY
+ * `chrono-slice`) as it scrolls into view: a short positional
  * settle, batched so siblings entering together reveal as one pulse.
  *
  * Safety / degradation:
@@ -28,13 +28,12 @@ export function ChronoSlices({ children, className = "" }: { children: ReactNode
     if (document.documentElement.dataset.visualStyle !== "glass" || resolveChronoTier() === "static" || !rootRef.current) return;
     const slices = Array.from(rootRef.current.querySelectorAll<HTMLElement>("[data-chrono-slice], .chrono-slice"));
     if (!slices.length) return;
-    gsap.set(slices, { opacity: 0, y: 22 });
     ScrollTrigger.batch(slices, {
       start: "top 90%",
       once: true,
       interval: 0.07,
       onEnter: (batch) =>
-        gsap.to(batch, { opacity: 1, y: 0, duration: 0.65, ease: "power2.out", stagger: 0.07, overwrite: true }),
+        gsap.fromTo(batch, { y: 6 }, { y: 0, duration: 0.24, ease: "power2.out", stagger: 0.025, overwrite: "auto" }),
     });
     requestAnimationFrame(() => ScrollTrigger.refresh());
     // eslint-disable-next-line react-hooks/exhaustive-deps

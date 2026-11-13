@@ -38,9 +38,9 @@ export default async function BillingPage({ params: paramsPromise }: { params: P
         actions={<PortalButton />}
       />
       {subscription.unavailable || budget.unavailable || rewards.unavailable ? <ErrorState title={copy.billingUnavailable} description={copy.billingUnavailableDesc} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <ResearchCard>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 2xl:grid-cols-5 [&>div]:min-w-0 [&>div]:[overflow-wrap:anywhere]">
             <div><div className="text-sm text-text-pg-muted">{copy.summary.currentPlan}</div><div className="mt-2"><PlanBadge plan={subscription.plan} /></div></div>
             <div><div className="text-sm text-text-pg-muted">{copy.summary.subscription}</div><div className="mt-2"><Badge tone="neutral"><StatusDot tone={subscription.subscription_status === "past_due" ? "red" : "emerald"} /> {subscription.subscription_status}</Badge></div></div>
             <div><div className="text-sm text-text-pg-muted">{copy.summary.creditBalance}</div><div className="mt-2 text-2xl font-semibold">{subscription.credit_balance}</div></div>

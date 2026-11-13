@@ -1,11 +1,11 @@
 {
   "seo": {
-    "title": "Research Desk",
-    "description": "Structured market, portfolio, event, strategy, and risk memos with source freshness and controlled delivery."
+    "title": "Reports",
+    "description": "Read saved research, inspect its sources and keep track of report freshness."
   },
-  "eyebrow": "RESEARCH DESK",
-  "title": "Research Desk",
-  "subtitle": "A concise daily brief under 120 words, combining BTC, ETH, HYPE, Hyperliquid top-20 breadth, sources, and your agent conversation memory.",
+  "eyebrow": "Research library",
+  "title": "Reports",
+  "subtitle": "Your saved research, sources, and delivery controls.",
   "filters": [
     "Daily Brief",
     "Portfolio Review",
@@ -15,17 +15,17 @@
   ],
   "archive": {
     "eyebrow": "Research Archive",
-    "title": "Available reports",
+    "title": "Saved reports",
     "created": "Created",
     "sourceFreshness": "Source freshness",
     "openReport": "Open report",
-    "emptyTitle": "No reports",
-    "emptyDescription": "Research archive is empty for the current account."
+    "emptyTitle": "No saved reports yet",
+    "emptyDescription": "Generate a brief to start your research library."
   },
   "detail": {
-    "eyebrow": "Detail Memo",
+    "eyebrow": "Report",
     "noSelectionTitle": "No report selected",
-    "noSelectionDescription": "Generate a daily brief to populate the research desk.",
+    "noSelectionDescription": "Choose a report from your library to read its sources and findings.",
     "language": "Language"
   },
   "mock": {

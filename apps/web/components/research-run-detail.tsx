@@ -5,7 +5,6 @@ import { Link as LinkIcon, RefreshCw, Quote } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { CapabilityGate, useCapabilityGate } from "@/components/ocean/capability-gate";
 import { EvidenceGraph, type EvidenceNode } from "@/components/ocean/evidence-graph";
-import { OceanShell } from "@/components/ocean/ocean-shell";
 import { ResearchTimeline, stagesForStatus } from "@/components/ocean/research-timeline";
 import { StatusBadgeWithPulse } from "@/components/ocean/status-badge";
 import { apiBaseUrl, getResearchRun, getResearchRunArtifacts, getResearchRunEvidence, type HarnessResearchRun, type HarnessResearchEvidence } from "@/lib/api";
@@ -13,6 +12,7 @@ import { OCEAN_POLL_INTERVAL_ACTIVE_MS, OCEAN_POLL_INTERVAL_IDLE_MS } from "@/li
 import { type Locale, withLocale } from "@/i18n/routing";
 
 const ACTIVE_STATUSES = new Set(["queued", "preparing", "running", "validating"]);
+const TERMINAL_STATUSES = new Set(["completed", "degraded", "failed", "timed_out", "canceled", "cancelled"]);
 
 type ConnectionMode = "sse" | "polling";
 
@@ -53,6 +53,7 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
   const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [evidenceError, setEvidenceError] = useState(false);
   const [artifactsError, setArtifactsError] = useState(false);
+  const [artifactsLoading, setArtifactsLoading] = useState(true);
   const [pollError, setPollError] = useState(false);
   const [refreshAttempt, setRefreshAttempt] = useState(0);
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>("polling");
@@ -226,84 +227,71 @@ export function ResearchRunDetail({ locale, runId }: { locale: Locale; runId: st
     if (state.status !== "available" || !runRef.current) return;
     let cancelled = false;
     setArtifactsError(false);
+    setArtifactsLoading(true);
     getResearchRunArtifacts(runId)
       .then((payload) => {
         if (!cancelled) setArtifacts(payload.artifacts || []);
       })
-      .catch(() => { if (!cancelled) setArtifactsError(true); });
+      .catch(() => { if (!cancelled) setArtifactsError(true); })
+      .finally(() => { if (!cancelled) setArtifactsLoading(false); });
     return () => { cancelled = true; };
   }, [state.status, runId, run?.status, refreshAttempt]);
 
+  const terminal = Boolean(run && TERMINAL_STATUSES.has(run.status));
+  const progress = run ? <ResearchTimeline locale={locale} nodes={stagesForStatus(run.status)} /> : null;
+  const artifact = run ? (
+    <section className="min-w-0 rounded-xl border border-border-pg bg-bg-panel p-4 md:p-6">
+      <h2 className="mb-3 text-sm font-semibold text-text-pg-muted">{zh ? "研究产出" : "Research artifact"}</h2>
+      {run.summary ? <p className="max-w-[76ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-text-pg">{run.summary}</p> : <p className="text-sm leading-6 text-text-pg-muted">{artifacts.length ? (zh ? "请在下方查看研究产出正文。" : "Read the research artifact below.") : artifactsLoading ? (zh ? "正在加载研究产出…" : "Loading research artifact…") : artifactsError ? (zh ? "研究产出暂未加载，请重试。" : "The research artifact could not be loaded. Please retry.") : (zh ? "研究结果尚未生成。" : "The research artifact has not been produced yet.")}</p>}
+      {run.summary && !artifacts.length && artifactsLoading ? <p role="status" className="mt-3 text-xs leading-5 text-text-pg-dim">{zh ? "正在加载研究产出…" : "Loading research artifact…"}</p> : null}
+      {artifacts.length ? <div className="mt-5 space-y-4 border-t border-border-pg pt-4">
+        {artifacts.map((item, index) => <details key={item.id} open={index === 0} className="min-w-0 border-b border-border-pg pb-4 last:border-b-0 last:pb-0">
+          <summary className="min-h-11 cursor-pointer break-words py-2 text-sm font-semibold text-text-pg">{item.title}<span className="ml-2 text-xs font-normal text-text-pg-dim">{item.type}</span></summary>
+          <div className="mt-2 max-w-[76ch]">{item.markdown ? <Markdown content={item.markdown} headingBaseLevel={3} /> : sourceUrl(item.url) ? <a href={sourceUrl(item.url)!} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 text-sm text-accent underline underline-offset-4"><LinkIcon className="h-3.5 w-3.5" aria-hidden />{zh ? "打开研究产出" : "Open research artifact"}</a> : <p className="text-sm leading-6 text-text-pg-muted">{zh ? "此产出尚无可显示的正文或链接。" : "No readable content or link has been recorded for this artifact."}</p>}</div>
+        </details>)}
+      </div> : null}
+      <p className="mt-5 max-w-[84ch] border-t border-border-pg pt-4 text-xs leading-5 text-text-pg-muted">{run.disclaimer || (zh ? "研究结论未经人工验证，不构成事实断言或投资建议。任何自动交易建议仅作为研究结果 / 策略草案展示，不会直接执行。" : "Conclusions are not human-verified and are not factual assertions or investment advice. Any automated trading suggestion is shown strictly as research output / strategy draft and is never executed directly.")}</p>
+    </section>
+  ) : null;
+
+  const sources = (
+    <section className="min-w-0 rounded-xl border border-border-pg bg-bg-panel p-4 md:p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold"><Quote className="h-4 w-4 text-accent" aria-hidden />{zh ? "可追溯来源" : "Traceable sources"}</h2>
+      {evidence.length ? <ol className="mt-2 divide-y divide-border-pg">
+        {evidence.map((item, index) => <li key={item.id || `${item.provider}-${index}`} className="py-4">
+          <div className="flex items-start gap-3"><span className="mt-0.5 text-xs tabular-nums text-text-pg-dim">[{item.citation_index ?? index + 1}]</span><div className="min-w-0 flex-1">
+            {sourceUrl(item.url) ? <a href={sourceUrl(item.url)!} target="_blank" rel="noopener noreferrer" className="break-words text-sm font-medium leading-6 text-text-pg underline decoration-border-pg underline-offset-4 hover:decoration-current">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</a> : <p className="break-words text-sm font-medium leading-6">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</p>}
+            <p className="mt-1 text-xs leading-5 text-text-pg-dim">{item.provider || item.source_scope || (zh ? "来源未标注" : "Provider not recorded")} · {formatTime(item.fetched_at, locale)}</p>
+            <p className={`mt-1 text-xs leading-5 ${item.is_verified === true ? "text-status-positive" : "text-text-pg-dim"}`}>{item.is_verified === true ? (zh ? "已核验快照" : "Verified snapshot") : (zh ? "未核验快照" : "Unverified snapshot")}</p>
+            {item.excerpt ? <p className="mt-2 break-words text-sm leading-6 text-text-pg-muted">{item.excerpt}</p> : null}
+            {item.verification_note ? <p className="mt-1 text-xs leading-5 text-text-pg-muted">{item.verification_note}</p> : null}
+          </div></div>
+        </li>)}
+      </ol> : <p className="mt-3 text-sm leading-6 text-text-pg-muted">{evidenceLoading ? (zh ? "正在加载证据…" : "Loading evidence…") : evidenceError ? (zh ? "证据暂未加载，请重试。" : "Evidence could not be loaded. Please retry.") : (zh ? "此任务尚未产生证据。" : "This run has not produced evidence yet.")}</p>}
+      {evidenceNodes.length ? <details className="mt-4 border-t border-border-pg pt-2"><summary className="flex min-h-11 cursor-pointer items-center text-xs font-medium text-text-pg-muted">{zh ? "证据关系" : "Evidence relationships"}</summary><div className="min-w-0 pt-3"><EvidenceGraph nodes={evidenceNodes} locale={locale} /></div></details> : null}
+    </section>
+  );
+
   return (
-    <OceanShell locale={locale} variant="research" className="min-h-[calc(100dvh-7rem)] rounded-2xl">
-      <div className="mx-auto max-w-5xl px-4 py-6 md:px-8">
-        <CapabilityGate state={state} locale={locale} title={zh ? "Harness Research 暂不可用" : "Harness Research not available yet"} onRetry={retry}>
-          {pollError || evidenceError || artifactsError ? <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-bg-panel p-3 text-sm text-status-warning"><span>{zh ? "部分更新无法加载，正在显示上次确认的内容。" : "Some updates could not be loaded. Showing the last confirmed content."}</span><button type="button" onClick={() => setRefreshAttempt(value => value + 1)} className="inline-flex min-h-10 items-center gap-1.5 underline underline-offset-4"><RefreshCw className="h-3.5 w-3.5" aria-hidden />{zh ? "重新加载" : "Reload"}</button></div> : null}
-          {!run && !pollError ? <p role="status" className="text-sm text-text-pg-muted">{zh ? "正在加载研究任务…" : "Loading research run…"}</p> : null}
-          {run ? (
-            <div className="space-y-5">
-              <header>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-semibold leading-tight md:text-2xl">{run.name || run.id}</h1>
-                    <p className="mt-2 text-xs text-text-pg-dim">
-                      {zh ? "创建" : "Created"} {formatTime(run.created_at, locale)} · {zh ? "更新" : "Updated"} {formatTime(run.updated_at, locale)} · {zh ? "耗时" : "Duration"} {formatDuration(run.created_at, run.updated_at, locale)}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <StatusBadgeWithPulse domain="research" value={run.status} locale={locale} />
-                    {ACTIVE_STATUSES.has(run.status) ? (
-                      <span className="text-[10px] text-text-pg-dim">
-                        {connectionMode === "sse" ? (zh ? "实时连接" : "Live connection") : (zh ? "连接恢复中 · 使用轮询更新" : "Reconnecting · polling updates")}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                {run.is_degraded ? (
-                  <p className="mt-3 border border-status-warning bg-bg-panel p-3 text-sm text-status-warning">
-                    {zh ? "该任务结果已降级：部分证据缺失，结论仅供参考。" : "This run is degraded: some evidence is missing, conclusions are partial."}
-                  </p>
-                ) : null}
-                {run.status === "failed" || run.status === "timed_out" ? (
-                  <p className="mt-3 border border-status-negative bg-bg-panel p-3 text-sm text-status-negative">
-                    {run.error_message || (zh ? "任务失败，请查看服务端状态。" : "Run failed; see the server-side status.")}
-                  </p>
-                ) : null}
-              </header>
-
-              <section className="border border-border-pg bg-bg-panel p-4 md:p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-pg-muted">{zh ? "任务时间线" : "Run timeline"}</h2>
-                <ResearchTimeline locale={locale} nodes={stagesForStatus(run.status)} />
-              </section>
-
-              <section className="border border-border-pg bg-bg-panel p-4 md:p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-pg-muted">{zh ? "证据关系" : "Evidence relationships"}</h2>
-                {evidenceNodes.length ? <EvidenceGraph nodes={evidenceNodes} locale={locale} /> : <p className="text-sm text-text-pg-muted">{evidenceLoading ? (zh ? "正在加载证据…" : "Loading evidence…") : evidenceError ? (zh ? "证据暂未加载，请重试。" : "Evidence could not be loaded. Please retry.") : (zh ? "此任务尚未产生证据。" : "This run has not produced evidence yet.")}</p>}
-                {evidence.length ? <div className="mt-5 border-t border-border-pg pt-4"><h3 className="flex items-center gap-2 text-sm font-semibold"><Quote className="h-4 w-4" aria-hidden />{zh ? "可追溯来源" : "Traceable sources"}</h3><ol className="mt-3 divide-y divide-border-pg">{evidence.map((item, index) => <li key={item.id || `${item.provider}-${index}`} className="py-3"><div className="flex items-start gap-3"><span className="mt-0.5 text-xs tabular-nums text-text-pg-dim">[{item.citation_index ?? index + 1}]</span><div className="min-w-0 flex-1">{sourceUrl(item.url) ? <a href={sourceUrl(item.url)!} target="_blank" rel="noopener noreferrer" className="break-words text-sm font-medium underline decoration-border-pg underline-offset-4 hover:decoration-current">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</a> : <p className="break-words text-sm font-medium">{item.title || item.provider || (zh ? "研究来源" : "Research source")}</p>}<p className="mt-1 text-xs leading-5 text-text-pg-dim">{item.provider || item.source_scope || (zh ? "来源未标注" : "Provider not recorded")} · {formatTime(item.fetched_at, locale)} · {item.is_verified === true ? (zh ? "已核验快照" : "Verified snapshot") : (zh ? "未核验快照" : "Unverified snapshot")}</p>{item.excerpt ? <p className="mt-2 break-words text-sm leading-6 text-text-pg-muted">{item.excerpt}</p> : null}{item.verification_note ? <p className="mt-1 text-xs leading-5 text-text-pg-muted">{item.verification_note}</p> : null}</div></div></li>)}</ol></div> : null}
-              </section>
-
-              <section className="border border-border-pg bg-bg-panel p-4 md:p-5">
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-pg-muted">{zh ? "研究产出" : "Research artifact"}</h2>
-                {run.summary ? (
-                  <>
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-text-pg">{run.summary}</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-text-pg-muted">{artifacts.length ? (zh ? "请在下方查看研究产出正文。" : "Read the research artifact below.") : (zh ? "研究结果尚未生成。" : "The research artifact has not been produced yet.")}</p>
-                )}
-                {artifacts.length ? <div className="mt-4 space-y-3 border-t border-border-pg pt-3">{artifacts.map((artifact, index) => <details key={artifact.id} open={index === 0} className="rounded-lg border border-border-pg bg-bg-app p-3"><summary className="cursor-pointer break-words text-sm font-medium">{artifact.title} <span className="ml-2 text-xs font-normal text-text-pg-dim">{artifact.type}</span></summary><div className="mt-3">{artifact.markdown ? <Markdown content={artifact.markdown} /> : sourceUrl(artifact.url) ? <a href={sourceUrl(artifact.url)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm underline underline-offset-4"><LinkIcon className="h-3.5 w-3.5" aria-hidden />{zh ? "打开研究产出" : "Open research artifact"}</a> : <p className="text-sm text-text-pg-muted">{zh ? "此产出尚无可显示的正文或链接。" : "No readable content or link has been recorded for this artifact."}</p>}</div></details>)}</div> : null}
-                <div className="mt-4 border-t border-border-pg pt-3">
-                  <p className="text-xs leading-5 text-text-pg-muted">{run.disclaimer || (zh ? "研究结论未经人工验证，不构成事实断言或投资建议。任何自动交易建议仅作为研究结果 / 策略草案展示，不会直接执行。" : "Conclusions are not human-verified and are not factual assertions or investment advice. Any automated trading suggestion is shown strictly as research output / strategy draft and is never executed directly.")}</p>
-                </div>
-              </section>
-
-              <p className="text-xs text-text-pg-dim">
-                <a href={withLocale(locale, "/research")} className="inline-flex items-center gap-1 hover:text-text-pg-muted">← {zh ? "返回研究任务列表" : "Back to research runs"}</a>
-              </p>
-            </div>
-          ) : null}
-        </CapabilityGate>
-      </div>
-    </OceanShell>
+    <section className="research-detail mx-auto w-full max-w-[1280px]" aria-labelledby="research-run-heading">
+      <a href={withLocale(locale, "/research")} className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm text-text-pg-muted transition-colors hover:text-text-pg">← {zh ? "返回研究任务列表" : "Back to research runs"}</a>
+      <header className="mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-60"><h1 id="research-run-heading" className="pg-page-title break-words text-2xl font-semibold leading-tight tracking-tight md:text-[1.875rem]">{run ? (run.name || run.id) : (zh ? "研究任务" : "Research run")}</h1>{run ? <p className="mt-2 text-xs leading-5 text-text-pg-dim">{zh ? "更新于" : "Updated"} <time dateTime={run.updated_at}>{formatTime(run.updated_at, locale)}</time> · {zh ? "耗时" : "Duration"} {formatDuration(run.created_at, run.updated_at, locale)}</p> : null}</div>
+          {run ? <div className="flex flex-col items-end gap-1.5"><StatusBadgeWithPulse domain="research" value={run.status} locale={locale} />{ACTIVE_STATUSES.has(run.status) ? <span className="text-xs text-text-pg-dim">{connectionMode === "sse" ? (zh ? "实时连接" : "Live connection") : (zh ? "连接恢复中 · 使用轮询更新" : "Reconnecting · polling updates")}</span> : null}</div> : null}
+        </div>
+        {run?.is_degraded ? <p className="mt-4 rounded-lg border border-status-warning bg-bg-panel p-3 text-sm leading-6 text-status-warning">{zh ? "该任务结果已降级：部分证据缺失，结论仅供参考。" : "This run is degraded: some evidence is missing, conclusions are partial."}</p> : null}
+        {run?.status === "failed" || run?.status === "timed_out" ? <p className="mt-4 rounded-lg border border-status-negative bg-bg-panel p-3 text-sm leading-6 text-status-negative">{run.error_message || (zh ? "任务失败，请查看服务端状态。" : "Run failed; see the server-side status.")}</p> : null}
+      </header>
+      <CapabilityGate state={state} locale={locale} title={zh ? "研究暂不可用" : "Research is not available yet"} onRetry={retry}>
+        {pollError || evidenceError || artifactsError ? <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-bg-panel p-3 text-sm text-status-warning"><span>{zh ? "部分更新无法加载，正在显示上次确认的内容。" : "Some updates could not be loaded. Showing the last confirmed content."}</span><button type="button" onClick={() => setRefreshAttempt(value => value + 1)} className="inline-flex min-h-11 items-center gap-1.5 underline underline-offset-4"><RefreshCw className="h-3.5 w-3.5" aria-hidden />{zh ? "重新加载" : "Reload"}</button></div> : null}
+        {!run && !pollError ? <p role="status" className="text-sm text-text-pg-muted">{zh ? "正在加载研究任务…" : "Loading research run…"}</p> : null}
+        {run ? <div className="space-y-5">
+          {!terminal ? <section className="rounded-xl border border-border-pg bg-bg-panel p-4 md:p-5"><h2 className="mb-4 text-sm font-semibold text-text-pg-muted">{zh ? "任务时间线" : "Run timeline"}</h2>{progress}</section> : null}
+          <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">{artifact}{sources}</div>
+          {terminal ? <details className="rounded-xl border border-border-pg bg-bg-panel px-4 py-1 md:px-5"><summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-text-pg-muted">{zh ? "查看任务过程" : "View research process"}</summary><div className="max-w-2xl border-t border-border-pg pb-4 pt-4"><h2 className="mb-4 text-sm font-semibold">{zh ? "任务时间线" : "Run timeline"}</h2><p className="mb-4 text-xs leading-5 text-text-pg-dim">{zh ? "创建" : "Created"} <time dateTime={run.created_at}>{formatTime(run.created_at, locale)}</time></p>{progress}</div></details> : null}
+        </div> : null}
+      </CapabilityGate>
+    </section>
   );
 }

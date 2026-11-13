@@ -186,13 +186,22 @@ test("memory read failures preserve privacy controls and cannot race a setting c
 test("report deep links, search and mobile reading retain the selected result", async ({ page, errors }, info) => {
   await page.goto("/en/reports?report=report-eth");
   await expect(page.locator("#report-detail").getByRole("heading", { name: "ETH portfolio review" })).toBeVisible();
+  if ((page.viewportSize()?.width || 0) < 1024) {
+    await page.getByRole("button", { name: "Back to archive", exact: true }).click();
+    await expect(page.getByLabel("Search reports by title or asset")).toBeFocused();
+  }
   await page.getByRole("button", { name: /BTC evidence brief/ }).click();
   await expect(page).toHaveURL(/report=report-btc/);
   if ((page.viewportSize()?.width || 0) < 1024) await expect(page.locator("#report-detail h2").first()).toBeFocused();
   await expect(page.locator("#report-detail").getByRole("heading", { name: "BTC findings" })).toBeVisible();
+  if ((page.viewportSize()?.width || 0) < 1024) {
+    await page.getByRole("button", { name: "Back to archive", exact: true }).click();
+    await expect(page.getByLabel("Search reports by title or asset")).toBeFocused();
+  }
   await page.getByLabel("Search reports by title or asset").fill("ETH");
   await expect(page.getByRole("button", { name: /ETH portfolio review/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /BTC evidence brief/ })).toHaveCount(0);
+  if ((page.viewportSize()?.width || 0) < 1024) await page.getByRole("button", { name: /ETH portfolio review/ }).click();
   await expect(page.locator("#report-detail").getByRole("heading", { name: "ETH portfolio review" })).toBeVisible();
   await page.screenshot({ path: info.outputPath("report-reader.png"), fullPage: true });
   await noOverflow(page); expect(errors).toEqual([]);
@@ -211,11 +220,19 @@ test("failed history deletion preserves the conversation and remains visible", a
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/en/chat");
   await expect(chatComposer(page)).toBeEnabled();
-  if ((page.viewportSize()?.width || 0) < 1024) await page.getByTestId("chat-history-trigger").click();
-  const remove = page.getByRole("button", { name: "Delete conversation: Primary research", exact: true });
+  const mobileHistory = (page.viewportSize()?.width || 0) < 1280;
+  if (mobileHistory) await page.getByTestId("chat-history-trigger").click();
+  // The desktop rail and native mobile dialog share their content. Assert the
+  // actual open panel, rather than the first hidden copy of its error message.
+  const history = page.getByRole("main").getByRole(mobileHistory ? "dialog" : "complementary", { name: "Conversation history", exact: true });
+  await expect(history).toBeVisible();
+  const remove = history.getByRole("button", { name: "Delete conversation: Primary research", exact: true });
   await remove.focus(); await expect(remove).toBeFocused(); await expect(remove).toBeVisible(); await remove.click();
-  await expect(page.getByRole("button", { name: /Primary research/ }).first()).toBeVisible();
-  await expect(page.getByText("Conversation history could not be updated. Your existing content is kept; please try again.", { exact: true }).first()).toBeVisible();
+  await expect(history.getByRole("button", { name: /^Primary research/ })).toBeVisible();
+  const noticeScope = mobileHistory ? history : page.getByRole("main").getByRole("region", { name: "Current conversation", exact: true });
+  const notice = "Conversation history could not be updated. Your existing content is kept; please try again.";
+  await expect(noticeScope.getByRole("alert").filter({ hasText: notice })).toBeVisible();
+  await expect(noticeScope.getByText(notice, { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -330,6 +347,10 @@ test("Chinese research, memory and report controls remain labeled and usable", a
   await expect(page.getByText("暂无待批准的提议。", { exact: true })).toBeVisible();
   await page.goto("/zh/reports?report=report-eth");
   await expect(page.locator("#report-detail").getByRole("heading", { name: "ETH portfolio review" })).toBeVisible();
+  if ((page.viewportSize()?.width || 0) < 1024) {
+    await page.getByRole("button", { name: "返回归档", exact: true }).click();
+    await expect(page.getByLabel("搜索报告标题或资产")).toBeFocused();
+  }
   await page.getByLabel("搜索报告标题或资产").fill("BTC");
   await expect(page.getByRole("button", { name: /BTC evidence brief/ })).toBeVisible();
   await noOverflow(page); expect(errors).toEqual([]);

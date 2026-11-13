@@ -95,6 +95,15 @@ const config: Config = {
         "ocean-cyan-muted": "rgba(66, 217, 255, 0.08)",
         "ocean-violet-muted": "rgba(139, 124, 255, 0.08)",
       },
+      // Accent text/focus adapts to the theme. Filled actions keep a stable
+      // cobalt with white text instead of inheriting the lighter Dark ink.
+      backgroundColor: {
+        accent: "var(--pg-action)",
+      },
+      textColor: {
+        // Small accent labels must also remain readable on selected soft fills.
+        accent: "var(--pg-accent-hover)",
+      },
       fontFamily: {
         sans: [
           "Inter",
@@ -102,10 +111,12 @@ const config: Config = {
           "-apple-system",
           "BlinkMacSystemFont",
           "'Segoe UI'",
-          "Roboto",
+          "'PingFang SC'",
+          "'Hiragino Sans GB'",
+          "'Microsoft YaHei'",
           "sans-serif",
         ],
-        mono: ["'JetBrains Mono'", "'Fira Code'", "monospace"],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
@@ -148,8 +159,8 @@ const config: Config = {
       md: "0.625rem",
       lg: "0.75rem",
       xl: "1rem",
-      "2xl": "1.25rem",
-      "3xl": "1.5rem",
+      "2xl": "1rem",
+      "3xl": "1.25rem",
       full: "9999px",
     },
   },

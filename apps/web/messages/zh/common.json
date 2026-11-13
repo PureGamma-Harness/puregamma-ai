@@ -9,32 +9,35 @@
     "switchToChinese": "切换到简体中文"
   },
   "nav": {
-    "tagline": "面向个人投资者的 Beta、Alpha 与 Long Gamma AI 决策助手。",
+    "tagline": "以证据为基础的研究工作区。",
     "groups": {
       "research": "Harness",
       "portfolio": "组合",
       "infrastructure": "基础设施",
       "company": "公司",
-      "trading": "交易"
+      "trading": "交易",
+      "workspace": "工作区",
+      "manage": "管理",
+      "tools": "工具与资源"
     },
-    "dashboard": "控制台",
+    "dashboard": "工作台",
     "news": "市场快讯",
-    "research": "Harness",
+    "research": "研究任务",
     "reports": "报告",
     "options": "期权",
     "backtest": "回测",
     "signals": "信号",
     "playbooks": "策略框架",
     "chat": "Agent 对话",
-    "nav": "NAV",
-    "secretary": "亲密秘书",
+    "nav": "投资组合",
+    "secretary": "个人助理",
     "integrations": "集成",
     "dailyPush": "每日推送",
     "dataSources": "数据源",
     "nautilus": "NautilusTrader",
-    "billing": "订阅",
-    "gateway": "API 管理",
-    "apiDocs": "API",
+    "billing": "订阅与账单",
+    "gateway": "模型网关",
+    "apiDocs": "API 文档",
     "admin": "管理",
     "account": "账户",
     "memory": "记忆",
@@ -42,7 +45,8 @@
     "access": "访问权限",
     "signup": "注册",
     "signin": "登录",
-    "mobileAccess": "手机访问"
+    "mobileAccess": "手机访问",
+    "imessage": "连接 iMessage"
   },
   "auth": {
     "googleLogin": "使用 Google 登录",
@@ -122,7 +126,7 @@
     }
   },
   "topbar": {
-    "credits": "-- Credits",
+    "credits": "积分暂不可用",
     "riskRegime": "风险偏好动能",
     "freshness": "60 秒内更新",
     "imessage": "iMessage Mock",

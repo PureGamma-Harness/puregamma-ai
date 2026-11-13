@@ -20,6 +20,7 @@ contradicts the code, the code wins — please fix the document.
 | An operator | [Deployment Overview](./deployment/DEPLOYMENT_OVERVIEW.md) → [Production Checklist](./deployment/PRODUCTION_CHECKLIST.md) → [Incident Runbook](./admin/INCIDENT_RUNBOOK.md) |
 | Working on LIVE trading | [LIVE Architecture](./live-trading/ARCHITECTURE.md) → [Feature Flags](./live-trading/FEATURE_FLAGS.md) → [Status](./live-trading/STATUS.md) |
 | Working on the Harness refactor | [Harness Core V2](./architecture/HARNESS_CORE_V2.md) → [Harness Research Architecture](./developer/HARNESS_RESEARCH_ARCHITECTURE.md) |
+| Working on product UI/UX | [Research workspace experience](./mvp-upgrade/worldclass-experience.md) → [Workflow upgrade](./mvp-upgrade/README.md) |
 
 ## Current implementation status
 

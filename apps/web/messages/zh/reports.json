@@ -1,11 +1,11 @@
 {
   "seo": {
-    "title": "研究台",
-    "description": "市场、组合、事件、策略与风险备忘录，包含数据新鲜度与受控投递记录"
+    "title": "研究报告",
+    "description": "阅读已保存的研究、追溯来源并检查报告时效。"
   },
-  "eyebrow": "研究台",
-  "title": "研究台",
-  "subtitle": "结合 BTC、ETH、HYPE 与 Hyperliquid Top20 实时广度、数据源和 Agent 记忆，生成 200 字内的每日重点并推送",
+  "eyebrow": "研究归档",
+  "title": "研究报告",
+  "subtitle": "阅读已保存的研究，追溯来源，管理投递。",
   "filters": [
     "每日简报",
     "组合复盘",
@@ -15,17 +15,17 @@
   ],
   "archive": {
     "eyebrow": "研究归档",
-    "title": "可用报告",
+    "title": "已保存的报告",
     "created": "创建时间",
     "sourceFreshness": "数据新鲜度",
     "openReport": "打开报告",
-    "emptyTitle": "暂无报告",
-    "emptyDescription": "当前账户的研究归档为空"
+    "emptyTitle": "尚无已保存的报告",
+    "emptyDescription": "生成一份简报，开始积累你的研究归档。"
   },
   "detail": {
-    "eyebrow": "详细备忘录",
+    "eyebrow": "报告",
     "noSelectionTitle": "未选择报告",
-    "noSelectionDescription": "生成每日简报后将填充研究台",
+    "noSelectionDescription": "从归档中选择报告，阅读来源与研究结论。",
     "language": "语言"
   },
   "mock": {

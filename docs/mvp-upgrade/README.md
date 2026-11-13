@@ -29,6 +29,7 @@ whole-route health and mutation journeys as separate evidence.
 | --- | --- | --- |
 | Product inventory | [Route audit](route-audit.md) | All 90 page files accounted for: 54 localized pages, 33 aliases, root redirect, two legal pages; default gates recorded |
 | Design and navigation | [UI foundation](ui-foundation.md) | Native mobile navigation, focus/skip/scroll recovery, shared controls, appearance synchronization, visible static/reduced-motion content and dashboard workflows |
+| Product experience | [Research workspace](worldclass-experience.md) | Shared visual hierarchy, exact Agent drafts, outcome-first research, mobile report reading, native page search and independently reviewed financial states |
 | Authentication and setup | [Auth and onboarding](auth-onboarding.md) | Persistent labels, local navigation validation, CAPTCHA recovery, retained research choices, storage-denial support, save retry and segment feedback |
 | Research workspace | [Research UI](ui-research.md) | Reliable history/actions, stoppable setup/stream, readable evidence and artifacts, report navigation, explicit partial failures and private-memory controls |
 | Business operations | [Operations UI](ui-operations.md) | Confirmed destructive operations, unknown-versus-zero financial states, validated inputs, reliable filters and honest checkout messaging |
@@ -63,12 +64,17 @@ populated layout checks and two transport-isolation cases added after the
 original 228-case audit. Full mode has
 216 canonical visits, 14 auxiliary cases and eight geometry cases. Default
 launch mode has 148 canonical browser visits, 68 release-gate checks and the
-same auxiliary/geometry cases. Focused workflow discovery totals 96 cases:
+same auxiliary/geometry cases. The original focused workflow discovery totals 96 cases:
 14 upgrade, 10 foundation, 20 authentication, 30 research and 22 operations.
+The product-experience suite adds 20 cases (10 scenarios in desktop and phone
+projects), bringing focused discovery to 116. Its native delayed-module,
+account-state and page-finder assertions supplement the original business and
+error checks; they do not replace them.
 Actual execution results remain separate from discovery. A scoped unavailable
 state is distinct from a working external provider.
 
-The final frozen runtime follow-up passed local full routes 238/238. Fresh
+Before this product-experience round, the frozen runtime follow-up passed local
+full routes 238/238. Its fresh
 [Web CI](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43461686491)
 passed 96 focused journeys, 59 Node checks, five separately copied-runtime
 checks, 26 real React checks and both full/default-launch route modes 238/238

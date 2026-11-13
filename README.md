@@ -25,9 +25,11 @@ What the trunk contains today:
   by Cordis, where business capabilities become plugins rather than a privileged
   application core. See [Harness Core V2](./docs/architecture/HARNESS_CORE_V2.md)
   for the decision, the migration slices and the per-capability retirement gate.
-- **Glass product experience**: the self-authored Glass presentation system,
-  classic appearance switch, capability-gated research surfaces, financial
-  stale-state handling, and accessible reduced-motion behavior.
+- **Research workspace experience**: a shared design system with Glass/Classic
+  and light/dark appearances, exact dashboard-to-Agent drafts, outcome-first
+  research, a mobile report reader, native keyboard navigation and truthful
+  account states. See the [product experience briefs](./docs/mvp-upgrade/worldclass-experience.md)
+  for implementation prompts and acceptance boundaries.
 - **Research and personalization**: Harness deep research with evidence
   snapshots, user-owned consent-gated memory, executable strategy specs,
   compiled backtests, and a sandboxed Research Runner.

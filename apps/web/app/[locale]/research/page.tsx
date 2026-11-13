@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { ResearchConsole } from "@/components/research-console";
-import { ChronoSlices, ChronoSlice } from "@/components/chrono/chrono-slices";
 import { isLocale, type Locale } from "@/i18n/routing";
-import { IntelligenceShell } from "@/components/terminal/intelligence-shell";
 
 export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const params = await paramsPromise;
@@ -13,13 +11,5 @@ export async function generateMetadata({ params: paramsPromise }: { params: Prom
 
 export default async function ResearchPage({ params: paramsPromise }: { params: Promise<{ locale: Locale }> }) {
   const params = await paramsPromise;
-  return (
-    <ChronoSlices>
-      <ChronoSlice>
-        <IntelligenceShell eyebrow={params.locale === "zh" ? "Research" : "Research"} title={params.locale === "zh" ? "研究正在执行。" : "Research is running."} byline={params.locale === "zh" ? "深度任务、证据与边界——由 Agent 执行。" : "Deep tasks, evidence and limits — executed by the Agent."}>
-          <ResearchConsole locale={params.locale} />
-        </IntelligenceShell>
-      </ChronoSlice>
-    </ChronoSlices>
-  );
+  return <ResearchConsole locale={params.locale} />;
 }

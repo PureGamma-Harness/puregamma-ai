@@ -6,7 +6,7 @@ import { HyperliquidMarketPanel } from "@/components/hyperliquid-market-panel";
 import { Markdown } from "@/components/markdown";
 import { TodayActivity } from "@/components/today-activity";
 import { EmptyState, ErrorState } from "@/components/puregamma";
-import { SectionLabel, TerminalPanel } from "@/components/terminal/editorial";
+import { TerminalPanel } from "@/components/terminal/editorial";
 import { IntelligenceHero } from "@/components/terminal/intelligence-hero";
 
 import { PortfolioNav } from "@/components/terminal/portfolio-nav";
@@ -84,17 +84,15 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
         ))}
       </nav>
 
-      {subscription.unavailable ? <div className="chrono-slice" data-chrono-slice><ErrorState title={copy.accountBillingUnavailable} description={copy.accountBillingUnavailableDesc} /></div> : null}
-
       <div className="hub-grid">
         <div className="hub-col">
-          <div className="section-row"><SectionLabel>{copy.sectionThesis}</SectionLabel><span className="text-[0.72rem] text-muted-2">{copy.sectionThesisDetail}</span></div>
+          <div className="section-row"><h2 className="text-sm font-semibold tracking-tight">{copy.sectionThesis}</h2><span className="text-xs text-muted-2">{copy.sectionThesisDetail}</span></div>
           <div className="chrono-slice" data-chrono-slice>
             <TerminalPanel>
-              {latest ? <Markdown content={latest.content_markdown} /> : <EmptyState title={copy.noBrief} description={copy.noBriefDesc} />}
+              {latest ? <Markdown content={latest.content_markdown} headingBaseLevel={3} /> : <><EmptyState title={copy.noBrief} description={copy.noBriefDesc} /><Link href={withLocale(locale, "/reports")} className="pg-button pg-button-secondary mt-4">{zh ? "查看研究报告" : "Open reports"}<ArrowUpRight className="h-4 w-4" aria-hidden /></Link></>}
             </TerminalPanel>
           </div>
-          <div className="section-row"><SectionLabel>{copy.sectionTrail}</SectionLabel><span className="text-[0.72rem] text-muted-2">{copy.sectionTrailDetail}</span></div>
+          <div className="section-row"><h2 className="text-sm font-semibold tracking-tight">{copy.sectionTrail}</h2><span className="text-xs text-muted-2">{copy.sectionTrailDetail}</span></div>
           <div className="chrono-slice" data-chrono-slice>
             <TerminalPanel>
               {recentReports.length === 0 ? <p className="text-sm text-muted">{copy.evidenceEmpty}</p> :
@@ -102,7 +100,7 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
                   {recentReports.map((report) => (<li key={report.id} className="flex items-center justify-between gap-3 py-2.5">
                     <Link href={withLocale(locale, `/reports?report=${encodeURIComponent(report.id)}`)} className="min-w-0 rounded-sm hover:underline" aria-label={zh ? `在报告中阅读：${report.title}` : `Read in reports: ${report.title}`}>
                       <div className="truncate text-sm font-medium text-text-pg">{report.title}</div>
-                      <div className="mt-0.5 text-[0.7rem] text-muted-2">{report.report_type}</div>
+                      <div className="mt-0.5 text-[0.7rem] text-muted-2">{report.assets.length ? report.assets.join(" · ") : (zh ? "已保存的研究报告" : "Saved research report")}</div>
                     </Link>
                     <span className="shrink-0 text-[0.7rem] tabular-nums text-muted-2">{fmtDate(report.created_at, locale)}</span>
                   </li>))}
@@ -112,19 +110,20 @@ export default async function DashboardPage({ params: paramsPromise }: { params:
         </div>
 
         <div className="hub-col">
+          {subscription.unavailable ? <div className="chrono-slice" data-chrono-slice><ErrorState title={copy.accountBillingUnavailable} description={copy.accountBillingUnavailableDesc} /></div> : null}
           <PortfolioNav locale={locale} />
-          <div className="section-row"><SectionLabel>{copy.sectionPulse}</SectionLabel><span className="text-[0.72rem] text-muted-2">{copy.sectionPulseDetail}</span></div>
+          <div className="section-row"><h2 className="text-sm font-semibold tracking-tight">{copy.sectionPulse}</h2><span className="text-xs text-muted-2">{copy.sectionPulseDetail}</span></div>
           <div className="chrono-slice" data-chrono-slice><GlobalMarketTerminal locale={locale} /></div>
         </div>
       </div>
 
-      <section className="chrono-slice" data-chrono-slice aria-label={zh ? "实时市场观察" : "Live market watch"}>
-        <div className="section-row"><SectionLabel>{zh ? "实时市场观察" : "Live market watch"}</SectionLabel><span className="text-[0.72rem] text-muted-2">{zh ? "Hyperliquid · 真实行情" : "Hyperliquid · live tape"}</span></div>
+      <section className="chrono-slice" data-chrono-slice aria-label={zh ? "市场观察" : "Market watch"}>
+        <div className="section-row"><h2 className="text-sm font-semibold tracking-tight">{zh ? "市场观察" : "Market watch"}</h2><span className="text-xs text-muted-2">{zh ? "Hyperliquid · 市场数据" : "Hyperliquid · market data"}</span></div>
         <HyperliquidMarketPanel locale={locale} />
       </section>
 
       <section className="chrono-slice" data-chrono-slice aria-label={zh ? "今日决策" : "Today decisions"}>
-        <div className="section-row"><SectionLabel>{copy.sectionToday}</SectionLabel><span className="text-[0.72rem] text-muted-2">{copy.sectionTodayDetail}</span></div>
+        <div className="section-row"><h2 className="text-sm font-semibold tracking-tight">{copy.sectionToday}</h2><span className="text-xs text-muted-2">{copy.sectionTodayDetail}</span></div>
         <TodayActivity locale={locale} />
       </section>
 

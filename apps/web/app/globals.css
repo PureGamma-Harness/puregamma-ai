@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-variable.woff2") format("woff2");
+}
+
 @keyframes secretary-portrait-blink {
   0%, 41.8%, 43.6%, 45.3%, 100% { opacity: 0; }
   42.3%, 43.1%, 44.1%, 44.8% { opacity: 1; }
@@ -53,33 +61,28 @@
      theme, not the operating system. The pre-paint script sets the same value
      inline so this is correct from the very first frame. */
   color-scheme: light;
-  /* PureGamma — California Daylight scene: warm cloud white / titanium,
-     near-black ink (not pure black), very light cool shadows. */
-  --background: #f4f4f2;
-  --foreground: #17181c;
+  /* Cool neutral workspace; data surfaces stay opaque in both appearances. */
+  --background: #f7f8fa;
+  --foreground: #182230;
   --panel: #ffffff;
-  --panel-muted: #f0f1f3;
-  --panel-strong: #e8eaee;
+  --panel-muted: #f1f4f8;
+  --panel-strong: #e8edf4;
   --secretary-assistant-bg: #e3edfa;
   --secretary-assistant-text: #172554;
   --secretary-assistant-border: #9cc3f0;
   --secretary-assistant-muted: #3b5ba9;
-  /* Inverted (primary) surface. In Light the primary action is near-black on
-     white; in Dark it inverts to near-white on black. Previously this was a
-     hardcoded `#FFFFFF` at the call site, which in the Light theme produced a
-     white button with a white border and black text — no visible boundary. */
-  --pg-surface-inverse: #17181c;
+  /* Inverted neutral surface for existing domain affordances. Shared primary
+     actions use the separate cobalt action tokens in both themes. */
+  --pg-surface-inverse: #182230;
   --pg-text-inverse: #ffffff;
-  --border: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(15, 23, 42, 0.18);
-  --muted: #5b606b;
-  /* Same reasoning as the dark set: #7c8089 measured 3.50:1 as small text, and
-     #0e8f61 only 3.63:1 (fine for a chart line, short of AA for a status word).
-     Both are darkened to clear 4.5:1 on every surface. */
-  --muted-2: #666a73;
-  --positive: #0a784f;
-  --negative: #c2413c;
-  --warning: #96600a;
+  --border: rgba(24, 34, 48, 0.10);
+  --border-strong: rgba(24, 34, 48, 0.20);
+  --muted: #526174;
+  /* Secondary labels remain readable on every neutral surface. */
+  --muted-2: #58677b;
+  --positive: #086a45;
+  --negative: #a93631;
+  --warning: #805107;
   --info: #2f5fc4;
   --accent-cyan: var(--info);
   --accent-emerald: var(--positive);
@@ -92,33 +95,42 @@
   --admin-accent-fill-soft: rgba(111, 147, 224, 0.12);
   --admin-accent-fill-faint: rgba(47, 95, 196, 0.08);
   --admin-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --accent: #2f66f5;
+  --accent-strong: #1f55e8;
+  --accent-soft: rgba(47, 102, 245, 0.10);
+  --accent-ring: rgba(47, 102, 245, 0.30);
+  --accent-violet: #6f5cf1;
+  --brand-gold: #8a6d1f;
+  --brand-gold-strong: #a5842c;
+  --lens-edge: rgba(255, 255, 255, 0.65);
+  --lens-haze: rgba(255, 255, 255, 0.12);
+  --lens-tint: rgba(90, 120, 255, 0.02);
+  --lens-shadow: 0 1px 2px rgba(24, 34, 48, 0.04);
+  --lens-fill-a: rgba(255, 255, 255, 0.99);
+  --lens-fill-b: rgba(247, 249, 252, 0.99);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* PureGamma — Night Intelligence scene: deep graphite + night blue-black,
-     faint cool light fields, near-white ink, calm semantic colors. */
-  --background: #0b0e14;
-  --foreground: #eef1f6;
-  --panel: #131a24;
-  --panel-muted: #1a2230;
-  --panel-strong: #212a3a;
+  /* Graphite workspace with crisp, near-solid layers. */
+  --background: #10141c;
+  --foreground: #edf1f7;
+  --panel: #171d27;
+  --panel-muted: #1d2633;
+  --panel-strong: #263244;
   --secretary-assistant-bg: #2e2624;
   --secretary-assistant-text: #f0e7e2;
   --secretary-assistant-border: #5d4a44;
   --secretary-assistant-muted: #c9b6ac;
   --pg-surface-inverse: #fafafa;
-  --pg-text-inverse: #0b0e14;
-  --border: rgba(150, 172, 214, 0.10);
-  --border-strong: rgba(150, 172, 214, 0.18);
-  --muted: #98a2b3;
-  /* `--muted-2` is the small meta text (timestamps, field labels, 11px hints).
-     At #6b7484 it measured 3.39:1 on `--panel-muted` — below WCAG AA for body
-     text. #8f97a6 clears 4.5:1 on all three surfaces (worst 5.43:1) while still
-     reading as secondary. */
-  --muted-2: #8f97a6;
+  --pg-text-inverse: #10141c;
+  --border: rgba(181, 196, 219, 0.12);
+  --border-strong: rgba(181, 196, 219, 0.24);
+  --muted: #a8b5c8;
+  /* Metadata uses a readable neutral rather than low-opacity white. */
+  --muted-2: #9baac0;
   --positive: #34d399;
-  --negative: #f87171;
+  --negative: #ff9797;
   --warning: #f5b453;
   --info: #93b4ff;
   --accent-cyan: var(--info);
@@ -129,38 +141,29 @@
      blue than the light theme to hold AA against `--panel`. */
   --admin-accent: #6f9bff;
   --admin-accent-soft: #a8c2ff;
-  --admin-accent-ink: #0b0e14;
+  --admin-accent-ink: #10141c;
   --admin-accent-fill: rgba(111, 155, 255, 0.18);
   --admin-accent-fill-soft: rgba(168, 194, 255, 0.14);
   --admin-accent-fill-faint: rgba(168, 194, 255, 0.10);
   --admin-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --accent: #8faeff;
+  --accent-strong: #aec3ff;
+  --accent-soft: rgba(143, 174, 255, 0.12);
+  --accent-ring: rgba(143, 174, 255, 0.24);
+  --accent-violet: #8b7cff;
+  --brand-gold: #d6b35a;
+  --brand-gold-strong: #e9cd82;
+  --lens-edge: rgba(255, 255, 255, 0.08);
+  --lens-haze: rgba(255, 255, 255, 0.025);
+  --lens-tint: rgba(120, 150, 255, 0.02);
+  --lens-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+  --lens-fill-a: rgba(29, 38, 51, 0.98);
+  --lens-fill-b: rgba(23, 29, 39, 0.98);
 }
 
-/* =====================================================================
-   Phase 1 — semantic token namespace (`--pg-*`)
-   =====================================================================
-   This block introduces the single semantic vocabulary the UI should
-   consume. Every value is an ALIAS to a token that already exists above,
-   so adopting it cannot change a single rendered pixel. That is the whole
-   point: the foundation is swapped while the appearance is pinned, and the
-   visual changes land in Phase 2 where they can be reviewed on their own.
-
-   Deliberately NOT changed here: the default theme (still dark in `:root`),
-   the radius scale, and every existing value. Those are Phase 2 work.
-
-   Rules this namespace exists to enforce:
-     1. A component names intent (`--pg-text-secondary`), never a raw colour.
-     2. Theme switching happens only in the token table. No `dark:` variants,
-        no `[data-theme=…]` inside component CSS.
-     3. A skin (glass) may not redeclare a semantic token.
-
-   Placement: declared once under `:root` only. Phase 1 had to duplicate this
-   under `:root[data-theme="light"]` because `:root` then held the DARK values
-   for the legacy tokens and a light page would have resolved `--pg-bg-page` to
-   a dark `--background`. Light is now the `:root` default for both the legacy
-   and the semantic names, so the duplication is gone: the aliases resolve
-   through the active theme automatically.
-   ===================================================================== */
+/* Shared semantic vocabulary. Existing utility names continue to resolve
+   through these aliases, while theme definitions remain in the table above.
+   Appearance changes affect shell material, not the opacity of data surfaces. */
 :root {
   /* ── Text ────────────────────────────────────────────────────────── */
   --pg-text-primary: var(--foreground);
@@ -193,27 +196,30 @@
   --pg-accent-hover: var(--accent-strong);
   --pg-accent-soft: var(--accent-soft);
   --pg-focus-ring: var(--accent-ring);
+  --pg-action: #2f66f5;
+  --pg-action-hover: #2458db;
+  --pg-action-text: #ffffff;
   --pg-positive: var(--positive);
   --pg-warning: var(--warning);
   --pg-danger: var(--negative);
   --pg-info: var(--info);
 
-  /* Soft status fills. These are NEW capability, not aliases: today a status
-     message can only be drawn with a solid 1px border (visually loud). With a
-     tinted fill available, Phase 4+ can render quiet state blocks.
-     Derived with `color-mix` from the status token itself rather than a
-     hand-picked rgba, so a status colour only has to be correct in one place
-     and its tint can never drift out of sync with it. */
+  /* Quiet semantic fills for status badges and contextual feedback. */
   --pg-positive-soft: color-mix(in oklab, var(--positive) 12%, transparent);
   --pg-warning-soft: color-mix(in oklab, var(--warning) 12%, transparent);
   --pg-danger-soft: color-mix(in oklab, var(--negative) 12%, transparent);
   --pg-info-soft: color-mix(in oklab, var(--info) 12%, transparent);
 
   /* ── Scale ───────────────────────────────────────────────────────── */
-  --pg-hairline: 1px;              /* Phase 2 narrows neutral rules to 0.5px */
-  --pg-radius-sm: 6px;
-  --pg-radius-md: 8px;
-  --pg-radius-lg: 12px;
+  --pg-hairline: 1px;
+  --pg-radius-sm: 8px;
+  --pg-radius-md: 12px;
+  --pg-radius-lg: 16px;
+  --pg-rail-width: 248px;
+  --pg-header-height: 64px;
+  --pg-control-height: 44px;
+  --pg-main-padding: 16px;
+  --pg-reading-measure: 72ch;
   --pg-chat-measure: 48rem;        /* one width contract for both chat routes */
   --pg-chat-measure-max: 880px;
 
@@ -226,6 +232,9 @@
 :root[data-font-scale="compact"] { font-size: 14px; }
 :root[data-font-scale="default"] { font-size: 16px; }
 :root[data-font-scale="large"] { font-size: 18px; }
+@media (min-width: 1024px) {
+  :root { --pg-main-padding: 24px; }
+}
 * {
   box-sizing: border-box;
 }
@@ -239,27 +248,12 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
   font-feature-settings: "tnum" 1, "cv02" 1, "cv03" 1;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 82%);
-}
-
-:root[data-theme="light"] body::before {
-  background:
-    linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
-  background-size: 56px 56px;
-}
 
 a {
   color: inherit;
@@ -348,7 +342,7 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pg-flow-dash {
+  .pg-flow-dash, .bus-flow, .link-pulse, .market-cell-flash {
     animation: none;
   }
 }
@@ -455,7 +449,7 @@ textarea {
 
 .ocean-flowing-border {
   background:
-    linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
+    linear-gradient(var(--panel), var(--panel)) padding-box,
     linear-gradient(120deg, var(--ocean-blue), var(--ocean-cyan), var(--ocean-violet), var(--ocean-cyan), var(--ocean-blue)) border-box;
   background-size: 100% 100%, 200% 100%;
   border: 1px solid transparent;
@@ -474,8 +468,8 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .ocean-flowing-border {
     animation: none;
-    background: var(--bg-panel);
-    border: 1px solid var(--border-pg);
+    background: var(--panel);
+    border: 1px solid var(--border);
   }
   .ocean-ripple-ring,
   .ocean-stage-active,
@@ -488,291 +482,182 @@ textarea {
 @media (max-width: 767px) {
   .ocean-flowing-border {
     animation: none;
-    background: var(--bg-panel);
-    border: 1px solid var(--border-pg);
+    background: var(--panel);
+    border: 1px solid var(--border);
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   PureGamma Glass visual system (self-authored; no external assets).
-
-   Two visual styles: "glass" (default) and "classic". The style lives on
-   <html data-visual-style>, persisted as localStorage "pg_visual_style"
-   and applied pre-paint by an inline script in the root layout.
-
-   Glass works by OVERRIDING the surface tokens (--panel / --panel-muted /
-   --panel-strong / --border*) so every existing bg-bg-panel / bg-bg-card
-   surface becomes translucent, then adding one shared backdrop-filter
-   rule for those surfaces. No component markup changes, no images, no
-   remote fonts. Financial/security routes set data-surface-tier=
-   "financial" for higher-opacity surfaces; Ocean pages use "ocean" to
-   disable double blur over the existing Ocean layers.
-   ──────────────────────────────────────────────────────────────────────── */
-
+/* Glass is a shell material, not a transparency override for data cards.
+   Both persisted appearances use the same opaque semantic surfaces. */
 :root {
-  --glass-blur: 12px;
-  --glass-blur-mobile: 6px;
-  --glass-saturate: 1.35;
-  --glass-edge: rgba(255, 255, 255, 0.07);
-  --glass-chrome-bg: rgba(16, 18, 22, 0.72);
-  --glass-ambient-a: rgba(46, 125, 255, 0.10);
-  --glass-ambient-b: rgba(66, 217, 255, 0.07);
-  --glass-ambient-c: rgba(139, 124, 255, 0.08);
-}
-
-/* Glass surface tokens, one block per theme.
-   These used to put the DARK values under a bare [data-visual-style="glass"]
-   and let a [data-theme="light"] block override them. Because this rule sits
-   AFTER the light token block, that made dark the implicit default of the skin:
-   any element matching [data-visual-style="glass"] without an explicit
-   data-theme="dark" attribute inherited dark glass surfaces. Once Light becomes
-   the `:root` default that ordering paints light pages with dark glass, so each
-   theme now states its own values and neither relies on source order. */
-:root[data-visual-style="glass"][data-theme="dark"] {
-  --panel: rgba(19, 26, 38, 0.90);
-  --panel-muted: rgba(26, 34, 48, 0.88);
-  --panel-strong: rgba(33, 42, 58, 0.94);
-  --border: rgba(150, 172, 214, 0.10);
-  --border-strong: rgba(150, 172, 214, 0.20);
-}
-
-:root[data-visual-style="glass"][data-theme="light"] {
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-muted: rgba(240, 241, 243, 0.92);
-  --panel-strong: rgba(233, 235, 238, 0.96);
-  --border: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(15, 23, 42, 0.18);
-  --glass-edge: rgba(255, 255, 255, 0.65);
-  --glass-chrome-bg: rgba(246, 247, 248, 0.78);
-  --glass-ambient-a: rgba(37, 99, 235, 0.10);
-  --glass-ambient-b: rgba(8, 145, 178, 0.07);
-  --glass-ambient-c: rgba(124, 58, 237, 0.07);
-}
-
-/* Financial / security routes: prices, positions, alerts and action
-   buttons must stay crisp — near-solid panels, softer blur. */
-:root[data-visual-style="glass"][data-surface-tier="financial"][data-theme="dark"] {
-  --panel: rgba(16, 21, 31, 0.97);
-  --panel-muted: rgba(22, 29, 41, 0.96);
-  --panel-strong: rgba(30, 38, 53, 0.98);
-  --glass-blur: 8px;
-}
-
-:root[data-visual-style="glass"][data-surface-tier="financial"][data-theme="light"] {
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-muted: rgba(246, 247, 248, 0.92);
-  --panel-strong: rgba(236, 238, 241, 0.97);
-}
-
-/* Ocean pages: the Ocean layers already blur beneath the work panel; a
-   second backdrop-filter would double-blur. Keep translucent panels but
-   disable the filter here. */
-:root[data-visual-style="glass"][data-surface-tier="ocean"][data-theme="dark"] {
-  --panel: rgba(10, 14, 22, 0.80);
-  --panel-muted: rgba(16, 21, 32, 0.74);
-  --panel-strong: rgba(22, 28, 42, 0.88);
-}
-
-:root[data-visual-style="glass"][data-surface-tier="ocean"][data-theme="light"] {
-  --panel: rgba(255, 255, 255, 0.86);
-  --panel-muted: rgba(244, 245, 246, 0.82);
-  --panel-strong: rgba(235, 237, 240, 0.90);
-}
-
-/* One shared glass treatment for every surface token consumer. */
-[data-visual-style="glass"] .bg-bg-panel,
-[data-visual-style="glass"] .bg-bg-card,
-[data-visual-style="glass"] .bg-bg-panel-muted,
-[data-visual-style="glass"] .bg-bg-card-muted,
-[data-visual-style="glass"] .bg-bg-app-elevated,
-[data-visual-style="glass"] .pg-glass-chrome {
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  --glass-blur: 16px;
+  --glass-blur-mobile: 10px;
+  --glass-saturate: 1.08;
+  --glass-edge: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --glass-chrome-bg: color-mix(in oklab, var(--panel) 92%, transparent);
+  --glass-ambient-a: color-mix(in oklab, var(--info) 4%, transparent);
+  --glass-ambient-b: transparent;
+  --glass-ambient-c: transparent;
 }
 
 [data-visual-style="glass"] .pg-glass-chrome {
   background: var(--glass-chrome-bg);
-  box-shadow: inset 0 1px 0 var(--glass-edge);
-}
-
-/* No double blur on Ocean pages. */
-[data-visual-style="glass"][data-surface-tier="ocean"] .bg-bg-panel,
-[data-visual-style="glass"][data-surface-tier="ocean"] .bg-bg-card,
-[data-visual-style="glass"][data-surface-tier="ocean"] .bg-bg-panel-muted,
-[data-visual-style="glass"][data-surface-tier="ocean"] .bg-bg-card-muted,
-[data-visual-style="glass"][data-surface-tier="ocean"] .bg-bg-app-elevated {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-/* Shell chrome (sidebar / topbar) keeps its blur on Ocean pages: it sits over
-   the app frame, not over body text, so readability is unaffected. */
-[data-visual-style="glass"][data-surface-tier="ocean"] .pg-glass-chrome {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
-/* Ambient backdrop: pure CSS light fields behind the app chrome. Static
-   gradients only — no animation, no images, no tracking. */
 .pg-glass-ambient {
   position: fixed;
   inset: 0;
   z-index: -10;
   pointer-events: none;
-  background:
-    radial-gradient(52% 44% at 14% 6%, var(--glass-ambient-a), transparent 64%),
-    radial-gradient(46% 40% at 86% 12%, var(--glass-ambient-b), transparent 62%),
-    radial-gradient(58% 46% at 50% 104%, var(--glass-ambient-c), transparent 66%);
+  background: radial-gradient(70% 32% at 50% 0%, var(--glass-ambient-a), transparent 72%);
 }
-
-:root[data-visual-style="classic"] .pg-glass-ambient {
-  display: none;
-}
-
-/* Graceful degradation: browsers without backdrop-filter get solid,
-   high-opacity panels (never translucent mush). */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root[data-visual-style="glass"] {
-    --panel: #191c22;
-    --panel-muted: #212123;
-    --panel-strong: #292929;
-  }
-  :root[data-visual-style="glass"][data-theme="light"] {
-    --panel: #ffffff;
-    --panel-muted: #f0f1f2;
-    --panel-strong: #e7e8ea;
-  }
-}
-
-/* User preference + low-end device degradation. */
-@media (prefers-reduced-transparency: reduce) {
-  [data-visual-style="glass"] .bg-bg-panel,
-  [data-visual-style="glass"] .bg-bg-card,
-  [data-visual-style="glass"] .bg-bg-panel-muted,
-  [data-visual-style="glass"] .bg-bg-card-muted,
-  [data-visual-style="glass"] .bg-bg-app-elevated,
-  [data-visual-style="glass"] .pg-glass-chrome {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
+:root[data-visual-style="classic"] .pg-glass-ambient { display: none; }
 @media (max-width: 767px) {
-  [data-visual-style="glass"] .bg-bg-panel,
-  [data-visual-style="glass"] .bg-bg-card,
-  [data-visual-style="glass"] .bg-bg-panel-muted,
-  [data-visual-style="glass"] .bg-bg-card-muted,
-  [data-visual-style="glass"] .bg-bg-app-elevated,
   [data-visual-style="glass"] .pg-glass-chrome {
-    backdrop-filter: blur(var(--glass-blur-mobile)) saturate(var(--glass-saturate));
-    -webkit-backdrop-filter: blur(var(--glass-blur-mobile)) saturate(var(--glass-saturate));
-  }
-  .pg-glass-ambient {
-    opacity: 0.55;
+    backdrop-filter: blur(var(--glass-blur-mobile));
+    -webkit-backdrop-filter: blur(var(--glass-blur-mobile));
   }
 }
+
 /* ════════════════════════════════════════════════════════════════════════
-   PureGamma — Liquid Intelligence (Glass + Classic).
-   California precision + liquid glass: modern tight sans display, huge
-   structured type, scarce premium glass (AI command / hero / chrome),
-   near-solid high-contrast data surfaces, complete Dark & Light scenes.
-   Tokens first; semantic classes only. Classic stays static + solid.
+   PureGamma workspace foundation (Glass + Classic).
+   Readable professional typography, opaque content, restrained shell material
+   and consistent control geometry across complete Light and Dark scenes.
    ════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --font-display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --lens-blur: 12px;
+  --lens-saturate: 1.08;
 
-  /* Intelligence blue: the single interaction color. Violet is refraction only. */
-  --accent: #5b8cff;
-  --accent-strong: #7aa0ff;
-  --accent-soft: rgba(91, 140, 255, 0.13);
-  --accent-ring: rgba(91, 140, 255, 0.38);
-  --accent-violet: #8b7cff;
-
-  /* Brand gold: premium / insight / member signal only — never a UI control color. */
-  --brand-gold: #d6b35a;
-  --brand-gold-strong: #e9cd82;
-
-  /* Liquid glass materials (opt-in, scarce). */
-  --lens-blur: 26px;
-  --lens-saturate: 1.35;
-  --lens-edge: rgba(255, 255, 255, 0.16);
-  --lens-haze: rgba(255, 255, 255, 0.055);
-  --lens-tint: rgba(120, 150, 255, 0.05);
-  --lens-shadow: 0 1px 1px rgba(0,0,0,0.22), 0 30px 70px -36px rgba(0,0,0,0.62);
-  --lens-fill-a: rgba(26, 33, 48, 0.84);
-  --lens-fill-b: rgba(14, 18, 27, 0.88);
-
-  --radius-panel: 18px;
-  --section-gap: clamp(32px, 5vw, 72px);
-}
-:root[data-theme="light"] {
-  --accent: #2f66f5;
-  --accent-strong: #1f55e8;
-  --accent-soft: rgba(47, 102, 245, 0.10);
-  --accent-ring: rgba(47, 102, 245, 0.30);
-  --accent-violet: #6f5cf1;
-  --brand-gold: #8a6d1f;
-  --brand-gold-strong: #a5842c;
-  --lens-edge: rgba(255, 255, 255, 0.92);
-  --lens-haze: rgba(255, 255, 255, 0.6);
-  --lens-tint: rgba(90, 120, 255, 0.045);
-  --lens-shadow: 0 1px 1px rgba(15,23,42,0.04), 0 32px 74px -46px rgba(15,23,42,0.20);
-  --lens-fill-a: rgba(255, 255, 255, 0.78);
-  --lens-fill-b: rgba(248, 250, 253, 0.82);
+  --radius-panel: var(--pg-radius-lg);
+  --section-gap: clamp(24px, 2.8vw, 40px);
 }
 
 body { font-family: var(--font-sans); }
 
-/* Night atmosphere: whisper-light ice blue + violet + moon white. */
+/* Material is limited to the frame; content sits on clear, opaque surfaces. */
 [data-visual-style="glass"] body {
-  background:
-    radial-gradient(64% 48% at 10% -8%, var(--accent-soft), transparent 60%),
-    radial-gradient(50% 42% at 94% -2%, rgba(139,124,255,0.06), transparent 58%),
-    radial-gradient(48% 54% at 88% 104%, rgba(190,205,255,0.045), transparent 62%),
-    var(--background);
-}
-:root[data-theme="light"][data-visual-style="glass"] body {
-  background:
-    radial-gradient(60% 46% at 12% -8%, rgba(47,102,245,0.06), transparent 60%),
-    radial-gradient(46% 40% at 92% -2%, rgba(111,92,241,0.045), transparent 58%),
-    var(--background);
+  background: radial-gradient(90% 24rem at 60% -8rem, var(--accent-soft), transparent 75%), var(--background);
 }
 
 /* ── Type: modern sans, tight, structured ──────────────────────────────── */
-.section-eyebrow {
+.section-eyebrow, .section-label {
   font-family: var(--font-sans);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
-.section-label {
-  font-family: var(--font-sans);
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--muted-2);
+.section-label { font-size: 0.6875rem; }
+.display-sm, .display-md, .display-lg, .display-xl {
+  font-family: var(--font-display);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
 }
-.display-sm { font-family: var(--font-display); font-weight: 700; line-height: 1.05; letter-spacing: -0.03em; font-size: clamp(1.5rem, 2.4vw, 1.9rem); }
-.display-md { font-family: var(--font-display); font-weight: 700; line-height: 1.0; letter-spacing: -0.035em; font-size: clamp(2rem, 4vw, 2.8rem); }
-.display-lg { font-family: var(--font-display); font-weight: 750; line-height: 0.98; letter-spacing: -0.04em; font-size: clamp(2.6rem, 6vw, 4.2rem); }
-.display-xl { font-family: var(--font-display); font-weight: 750; line-height: 0.96; letter-spacing: -0.045em; font-size: clamp(3.3rem, 8.5vw, 6rem); }
+.display-sm { font-size: clamp(1.125rem, 1.3vw, 1.25rem); }
+.display-md { font-size: clamp(1.5rem, 2.1vw, 1.875rem); }
+.display-lg { font-size: clamp(1.5rem, 2.4vw, 2rem); }
+.display-xl { font-size: clamp(1.75rem, 2.8vw, 2rem); }
+:lang(zh) .section-eyebrow, :lang(zh) .section-label { letter-spacing: 0.025em; }
+:lang(zh) .display-sm, :lang(zh) .display-md, :lang(zh) .display-lg, :lang(zh) .display-xl { letter-spacing: -0.01em; }
 .editorial-rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+
+/* Shared component styles stay before utilities in Tailwind's cascade, so
+   callers can intentionally refine layout with their existing className prop. */
+@layer components {
+  .pg-card {
+    min-width: 0;
+    border: 1px solid var(--pg-border-subtle);
+    border-radius: var(--pg-radius-lg);
+    background: var(--pg-surface-1);
+    color: var(--pg-text-primary);
+    padding: 20px;
+  }
+  .pg-button {
+    display: inline-flex;
+    min-height: var(--pg-control-height);
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: var(--pg-radius-md);
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+  }
+  .pg-button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .pg-button-primary { background: var(--pg-action); color: var(--pg-action-text); }
+  .pg-button-primary:hover:not(:disabled) { background: var(--pg-action-hover); }
+  .pg-button-secondary { border-color: var(--pg-border-default); background: var(--pg-surface-1); color: var(--pg-text-primary); }
+  .pg-button-secondary:hover:not(:disabled) { background: var(--pg-surface-hover); }
+  .pg-button-danger { background: var(--pg-danger-soft); color: var(--pg-danger); }
+  .pg-button-danger:hover:not(:disabled) { border-color: var(--pg-danger); }
+  .pg-input {
+    min-height: var(--pg-control-height);
+    width: 100%;
+    border: 1px solid var(--pg-border-default);
+    border-radius: var(--pg-radius-md);
+    background: var(--pg-surface-1);
+    color: var(--pg-text-primary);
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  }
+  .pg-input::placeholder { color: var(--pg-text-placeholder); }
+  .pg-input:disabled { cursor: not-allowed; opacity: 0.6; }
+  .pg-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .pg-page-header { margin-bottom: 24px; }
+  .pg-page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+  .pg-page-copy { min-width: 0; max-width: var(--pg-reading-measure); }
+  .pg-page-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--pg-text-secondary); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+  .pg-page-title { font-family: var(--font-display); color: var(--pg-text-primary); font-size: clamp(1.5rem, 2.4vw, 2rem); font-weight: 650; line-height: 1.25; letter-spacing: -0.025em; text-wrap: balance; }
+  .pg-page-description { max-width: var(--pg-reading-measure); margin-top: 10px; color: var(--pg-text-secondary); font-size: 0.9375rem; line-height: 1.7; }
+  .pg-page-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .pg-metadata { color: var(--pg-text-tertiary); font-size: 0.75rem; line-height: 1.6; }
+  .pg-reading { max-width: var(--pg-reading-measure); }
+  .pg-empty-state { border: 1px dashed var(--pg-border-default); border-radius: var(--pg-radius-lg); background: var(--pg-surface-1); padding: 32px 24px; text-align: center; }
+  .pg-error-state { border: 1px solid var(--pg-border-default); border-radius: var(--pg-radius-lg); background: var(--pg-surface-1); padding: 20px; }
+  :lang(zh) .pg-page-eyebrow { letter-spacing: 0.025em; }
+  :lang(zh) .pg-page-title { letter-spacing: -0.01em; }
+  @media (min-width: 768px) { .pg-card { padding: 24px; } }
+  @media (max-width: 767px) {
+    .pg-page-header-row { flex-direction: column; gap: 16px; }
+    .pg-page-actions { width: 100%; }
+    .pg-input { font-size: 1rem; }
+  }
+}
 
 /* ── Default data surface: near-solid, high-contrast (no glass everywhere). */
 .terminal-panel {
   border: 1px solid var(--border);
   background: var(--panel);
   border-radius: var(--radius-panel);
-  padding: clamp(18px, 2.6vw, 28px);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  padding: clamp(20px, 2vw, 24px);
+  box-shadow: none;
 }
-:root[data-theme="light"] .terminal-panel { box-shadow: 0 1px 2px rgba(15,23,42,0.05); }
+
 
 /* ── The Liquid Lens: scarce, premium glass. ────────────────────────────── */
 .liquid, .lens-surface {
@@ -803,7 +688,7 @@ body { font-family: var(--font-sans); }
     radial-gradient(30% 18% at var(--lx, 50%) var(--ly, -10%), rgba(255,255,255,0.09), transparent 62%),
     linear-gradient(180deg, var(--lens-haze), transparent 26%),
     radial-gradient(90% 70% at 18% 0%, var(--lens-tint), transparent 60%);
-  opacity: 0.9;
+  opacity: 0.35;
 }
 [data-visual-style="glass"] .liquid::after,
 [data-visual-style="glass"] .lens-surface::after {
@@ -814,16 +699,6 @@ body { font-family: var(--font-sans); }
   pointer-events: none;
   box-shadow: inset 0 1px 0 var(--lens-edge), inset 1px 0 0 rgba(255,255,255,0.05), inset -1px 0 0 rgba(255,255,255,0.03);
 }
-[data-visual-style="glass"] .liquid:active,
-[data-visual-style="glass"] .lens-surface:active {
-  transform: translateY(0.5px) scale(0.996);
-  box-shadow: inset 0 2px 12px rgba(0,0,0,0.16), var(--lens-shadow);
-}
-:root[data-theme="light"][data-visual-style="glass"] .liquid:active,
-:root[data-theme="light"][data-visual-style="glass"] .lens-surface:active {
-  box-shadow: inset 0 2px 12px rgba(15,23,42,0.06), var(--lens-shadow);
-}
-
 /* Quiet alias for legacy class usage (data panels). */
 [data-visual-style="glass"] .liquid-surface {
   border: 1px solid var(--border);
@@ -841,7 +716,7 @@ body { font-family: var(--font-sans); }
 
 /* ── Chill ambient (static, whisper quiet) ──────────────────────────────── */
 .chronosphere { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; opacity: 0; }
-[data-visual-style="glass"] .chronosphere { opacity: 1; }
+[data-visual-style="glass"] .chronosphere { opacity: 0.45; }
 :root[data-visual-style="classic"] .chronosphere { display: none; }
 .chronosphere-field { position: absolute; inset: 0; background:
 
@@ -886,41 +761,35 @@ body { font-family: var(--font-sans); }
 .nav-value { font-size: clamp(2rem, 3.6vw, 2.8rem); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
 .time-pulse, .time-pulse-live { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--accent); }
 
-/* ── Shell chrome: floating rail + floating top bar ─────────────────────── */
+/* ── Shell chrome: inset rail + quiet full-width utility header ─────────── */
 .shell-rail {
   position: fixed;
   inset: 12px auto 12px 12px;
-  bottom: 12px;
-  width: 260px;
+  width: var(--pg-rail-width);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--pg-radius-lg);
   background: var(--panel);
   overflow: hidden;
 }
 [data-visual-style="glass"] .shell-rail {
-  background: color-mix(in oklab, var(--panel) 96%, transparent);
-  backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 60px -38px rgba(0,0,0,0.6);
+  background: var(--glass-chrome-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 .shell-chrome {
   position: sticky;
-  top: 12px;
+  top: 0;
   z-index: 30;
-  margin: 12px 14px 0;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  min-height: var(--pg-header-height);
+  margin: 0;
+  border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
 [data-visual-style="glass"] .shell-chrome {
-  background: color-mix(in oklab, var(--panel) 82%, transparent);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 18px 50px -34px rgba(0,0,0,0.55);
-}
-:root[data-theme="light"] .shell-chrome {
-  background: color-mix(in oklab, var(--panel) 74%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 18px 50px -38px rgba(15,23,42,0.16);
+  background: var(--glass-chrome-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────── */
@@ -928,7 +797,8 @@ body { font-family: var(--font-sans); }
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.5rem 0.8rem;
+  min-height: 40px;
+  padding: 0.55rem 0.75rem;
   border-radius: 10px;
   color: var(--muted);
   font-size: 0.875rem;
@@ -939,24 +809,19 @@ body { font-family: var(--font-sans); }
 .nav-item:hover { color: var(--foreground); background: var(--panel-muted); }
 .nav-item .nav-icon { width: 1.05rem; height: 1.05rem; opacity: 0.9; }
 .nav-active {
-  color: var(--foreground);
+  color: var(--accent-strong);
   font-weight: 600;
-  background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 12%, var(--panel)), var(--panel));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-}
-:root[data-theme="light"] .nav-active {
-  background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 10%, var(--panel)), var(--panel));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+  background: var(--accent-soft);
 }
 .nav-active::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 9px;
-  bottom: 9px;
+  top: 11px;
+  bottom: 11px;
   width: 2px;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent), transparent 72%);
+  background: var(--accent);
 }
 
 /* The rail's navigation remains scrollable on compact desktops, but its
@@ -971,7 +836,11 @@ body { font-family: var(--font-sans); }
 
 /* Shared keyboard and mobile navigation behavior, in both appearances. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.shell-main { scroll-margin-top: 6rem; }
+.shell-main {
+  min-width: 0;
+  padding: var(--pg-main-padding);
+  scroll-margin-top: calc(var(--pg-header-height) + 16px);
+}
 .shell-main:focus { outline: none; }
 .skip-navigation {
   position: fixed;
@@ -981,8 +850,8 @@ body { font-family: var(--font-sans); }
   transform: translateY(-200%);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background: var(--pg-surface-inverse);
-  color: var(--pg-text-inverse);
+  background: var(--pg-action);
+  color: var(--pg-action-text);
   padding: 0.8rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -1031,18 +900,18 @@ body { font-family: var(--font-sans); }
 .workflow-index { padding-top: 2px; color: var(--muted-2); font-family: var(--font-mono); font-size: 0.65rem; }
 .workflow-link strong { display: block; font-size: 0.85rem; font-weight: 600; }
 .workflow-link small { display: block; margin-top: 5px; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
-.hub-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); }
-.hub-col { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
-.workbench-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); }
+.hub-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 40px); }
+.hub-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.workbench-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 40px); }
 .section-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
-.intelligence-shell { max-width: 1180px; margin: 0 auto; }
+.intelligence-shell { width: 100%; min-width: 0; max-width: 1180px; margin: 0 auto; }
 @media (max-width: 1023px) { .hub-grid, .workbench-grid { grid-template-columns: 1fr; } }
 
 /* ── Precision workbench tables (data-first, calm) ──────────────────────── */
 .workbench { width: 100%; }
 .workbench-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; }
 .workbench table { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: 0.78rem; }
-.workbench thead th { text-align: left; font-family: var(--font-sans); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-2); padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.workbench thead th { text-align: left; font-family: var(--font-sans); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-2); padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .workbench tbody td { padding: 12px; border-top: 1px solid var(--border); color: var(--foreground); font-variant-numeric: tabular-nums; transition: background 0.18s ease; }
 .workbench tbody tr:first-child td { border-top: 0; }
 .workbench tbody tr:hover td { background: var(--panel-muted); }
@@ -1069,32 +938,33 @@ body { font-family: var(--font-sans); }
   align-items: center;
   gap: 0.45rem;
   border: 1px solid transparent;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 999px;
-  padding: 0.55rem 1rem;
-  font-size: 0.72rem;
+  background: var(--pg-action);
+  color: var(--pg-action-text);
+  min-height: var(--pg-control-height);
+  border-radius: var(--pg-radius-md);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
   font-weight: 650;
   letter-spacing: 0.02em;
   transition: background 0.16s ease, transform 0.12s ease;
 }
-:root[data-theme="light"] .command-submit { color: #fff; }
-.command-submit:hover { background: var(--accent-strong); }
+
+.command-submit:hover { background: var(--pg-action-hover); }
 .command-submit:active { transform: translateY(0.5px) scale(0.99); }
 .command-chip {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: color-mix(in oklab, var(--panel) 70%, transparent);
   color: var(--muted);
+  min-height: 36px;
   padding: 0.4rem 0.8rem;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 500;
   transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 .command-chip:hover { color: var(--foreground); border-color: color-mix(in oklab, var(--accent) 45%, transparent); background: var(--accent-soft); }
 
-[data-visual-style="glass"] :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-[data-visual-style="glass"] input:focus, [data-visual-style="glass"] select:focus, [data-visual-style="glass"] textarea:focus {
+input:focus-visible, select:focus-visible, textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
@@ -1102,13 +972,9 @@ body { font-family: var(--font-sans); }
 /* ── Degradation ────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .status-dot-live::after { animation: none; opacity: 0.6; }
-  [data-visual-style="glass"] .liquid::before, [data-visual-style="glass"] .lens-surface::before { opacity: 0.5; }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .mobile-nav-dialog::backdrop { backdrop-filter: none; }
-  [data-visual-style="glass"] .liquid, [data-visual-style="glass"] .lens-surface { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
-  [data-visual-style="glass"] .shell-chrome, [data-visual-style="glass"] .shell-rail { backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .chronosphere { opacity: 0.35; }
+  [data-visual-style="glass"] .liquid::before, [data-visual-style="glass"] .lens-surface::before { opacity: 0; }
+  .pg-button, .command-submit, .nav-item, .workflow-link { transition: none; }
+  .command-submit:active { transform: none; }
 }
 @media (max-width: 767px) {
   .workflow-strip { grid-template-columns: 1fr; }
@@ -1122,4 +988,19 @@ body { font-family: var(--font-sans); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   [data-visual-style="glass"] .liquid, [data-visual-style="glass"] .lens-surface { background: var(--panel); }
   [data-visual-style="glass"] .shell-chrome, [data-visual-style="glass"] .shell-rail { background: var(--panel); }
+}
+
+/* Preference overrides follow mobile material rules so reduced transparency
+   cannot accidentally be re-enabled by a narrower viewport. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-visual-style="glass"] .pg-glass-chrome,
+  [data-visual-style="glass"] .liquid,
+  [data-visual-style="glass"] .lens-surface,
+  [data-visual-style="glass"] .shell-chrome,
+  [data-visual-style="glass"] .shell-rail {
+    background: var(--panel);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .pg-glass-ambient, .chronosphere { display: none; }
 }

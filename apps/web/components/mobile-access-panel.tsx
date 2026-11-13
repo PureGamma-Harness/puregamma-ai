@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Globe, QrCode, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
 import {
   getMobileAccessQr,
@@ -43,18 +43,19 @@ function PinField({ value, copy, canManage, onRotate, onCustom }: {
 }) {
   const [visible, setVisible] = useState(false);
   const [draft, setDraft] = useState("");
+  const customPinId = useId();
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-2xl tracking-[0.35em] text-text-pg">{visible ? value : "••••••••"}</span>
-        <button type="button" onClick={() => setVisible((v) => !v)} className="rounded-md border border-border-pg px-2 py-1 text-xs text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg">{visible ? copy.hide : copy.show}</button>
-        {canManage ? <button type="button" onClick={onRotate} className="rounded-md border border-border-pg px-2 py-1 text-xs text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg"><RefreshCw className="mr-1 inline h-3 w-3" />{copy.rotatePin}</button> : null}
+        <button type="button" onClick={() => setVisible((v) => !v)} className="min-h-[44px] min-w-[44px] rounded-md border border-border-pg px-2 py-1 text-xs text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg">{visible ? copy.hide : copy.show}</button>
+        {canManage ? <button type="button" onClick={onRotate} className="min-h-[44px] min-w-[44px] rounded-md border border-border-pg px-2 py-1 text-xs text-text-pg-muted hover:border-border-pg-strong hover:text-text-pg"><RefreshCw className="mr-1 inline h-3 w-3" />{copy.rotatePin}</button> : null}
       </div>
       {canManage ? (
       <form onSubmit={(event) => { event.preventDefault(); if (draft.trim()) onCustom(draft.trim()); }} className="flex flex-wrap items-center gap-2">
-        <label className="sr-only">{copy.customPin}</label>
-        <input value={draft} onChange={(event) => setDraft(event.target.value)} inputMode="numeric" pattern="[0-9]{8}" maxLength={8} placeholder={copy.customPlaceholder} className="h-9 w-40 rounded-lg border border-border-pg bg-bg-app px-3 text-sm tracking-[0.25em] outline-none focus:border-border-pg-strong" />
-        <button type="submit" className="h-9 rounded-lg border border-border-pg-strong bg-pg-white px-3 text-xs font-semibold text-pg-black">{copy.apply}</button>
+        <label htmlFor={customPinId} className="sr-only">{copy.customPin}</label>
+        <input id={customPinId} name="mobile_access_pin" autoComplete="off" value={draft} onChange={(event) => setDraft(event.target.value)} inputMode="numeric" pattern="[0-9]{8}" maxLength={8} placeholder={copy.customPlaceholder} className="min-h-[44px] w-40 rounded-lg border border-border-pg bg-bg-app px-3 text-sm tracking-[0.25em] outline-none focus:border-border-pg-strong" />
+        <button type="submit" className="min-h-[44px] min-w-[44px] rounded-lg border border-border-pg-strong bg-pg-white px-3 text-xs font-semibold text-pg-black">{copy.apply}</button>
         <span className="text-xs text-text-pg-dim">{copy.customPin}</span>
       </form>
       ) : null}
@@ -113,7 +114,7 @@ export function MobileAccessPanel({ copy }: { copy: RemoteCopy }) {
       {error ? (
         <div className="rounded-xl border border-status-negative/40 bg-bg-panel p-5">
           <strong className="text-sm">{error}</strong>
-          <div className="mt-3"><button type="button" onClick={() => void load()} className="rounded-lg border border-border-pg px-3 py-2 text-sm">{copy.retry}</button></div>
+          <div className="mt-3"><button type="button" onClick={() => void load()} className="min-h-[44px] min-w-[44px] rounded-lg border border-border-pg px-3 py-2 text-sm">{copy.retry}</button></div>
         </div>
       ) : null}
       {status ? (
@@ -122,7 +123,7 @@ export function MobileAccessPanel({ copy }: { copy: RemoteCopy }) {
             <div className="flex items-center gap-2 text-sm font-semibold"><Globe className="h-4 w-4 text-status-positive" />{copy.public}</div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-text-pg-muted">{status.public.running ? copy.running : copy.stopped}</span>
-              {isAdmin ? <button type="button" disabled={busy} onClick={() => void toggleTunnel()} className="rounded-lg border border-border-pg-strong bg-pg-white px-3 py-2 text-xs font-semibold text-pg-black disabled:opacity-50">{status.public.running ? copy.stopTunnel : copy.startTunnel}</button> : null}
+              {isAdmin ? <button type="button" disabled={busy} onClick={() => void toggleTunnel()} className="min-h-[44px] min-w-[44px] rounded-lg border border-border-pg-strong bg-pg-white px-3 py-2 text-xs font-semibold text-pg-black disabled:opacity-50">{status.public.running ? copy.stopTunnel : copy.startTunnel}</button> : null}
             </div>
           </div>
           {status.public.running ? (

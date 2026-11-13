@@ -97,28 +97,73 @@ test("desktop navigation announces the current page and dashboard offers real wo
     await expect(workflows.locator(`a[href="/en/${path}"]`)).toBeVisible();
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await page.goto("/en/account");
+  const primaryNav = page.getByRole("navigation", { name: "Primary navigation", exact: true });
+  const account = primaryNav.getByRole("link", { name: "Account", exact: true });
+  await expect(account).toHaveAttribute("aria-current", "page");
+  for (const height of [720, 640]) {
+    if (height === 640) await page.setViewportSize({ width: 1024, height });
+    // A passive intersection assertion must pass before an interaction could
+    // automatically scroll a clipped link into view for the test.
+    await expect(account).toBeInViewport({ ratio: 1 });
+    const navBox = await primaryNav.boundingBox();
+    const accountBox = await account.boundingBox();
+    expect(navBox).not.toBeNull();
+    expect(accountBox).not.toBeNull();
+    expect(accountBox!.y).toBeGreaterThanOrEqual(navBox!.y - 1);
+    expect(accountBox!.y + accountBox!.height).toBeLessThanOrEqual(navBox!.y + navBox!.height + 1);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  }
+  // Navigate through the shared finder so clicking a hidden Dashboard link
+  // cannot supply the sidebar's required upward scroll on the app's behalf.
+  await page.getByTestId("workspace-search-trigger").click();
+  const finder = page.getByRole("dialog", { name: "Search workspace pages", exact: true });
+  await finder.getByRole("combobox", { name: "Page name", exact: true }).fill("Dashboard");
+  await finder.getByRole("option", { name: "Dashboard", exact: true }).click();
+  await expect(page).toHaveURL(/\/en\/dashboard$/);
+  const dashboard = primaryNav.getByRole("link", { name: "Dashboard", exact: true });
+  await expect(dashboard).toHaveAttribute("aria-current", "page");
+  await expect(dashboard).toBeInViewport({ ratio: 1 });
+  const navBox = await primaryNav.boundingBox();
+  const dashboardBox = await dashboard.boundingBox();
+  expect(navBox).not.toBeNull();
+  expect(dashboardBox).not.toBeNull();
+  expect(dashboardBox!.y).toBeGreaterThanOrEqual(navBox!.y - 1);
+  expect(dashboardBox!.y + dashboardBox!.height).toBeLessThanOrEqual(navBox!.y + navBox!.height + 1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
 test("appearance controls share current state, including when browser storage is blocked", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/en");
   const glassButtons = page.getByRole("button", { name: "Switch to classic appearance", exact: true });
-  await expect(glassButtons).toHaveCount(2);
-  await glassButtons.last().click();
+  await expect(glassButtons).toHaveCount(1);
+  await glassButtons.click();
   await expect(page.locator("html")).toHaveAttribute("data-visual-style", "classic");
   const classicButtons = page.getByRole("button", { name: "Switch to glass appearance", exact: true });
-  await expect(classicButtons).toHaveCount(2);
-  await expect(classicButtons.first()).toHaveAttribute("aria-pressed", "false");
+  await expect(classicButtons).toHaveCount(1);
+  await expect(classicButtons).toHaveAttribute("aria-pressed", "false");
   await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error("Storage unavailable in this test"); }; });
-  await classicButtons.first().click();
+  await classicButtons.click();
   await expect(page.locator("html")).toHaveAttribute("data-visual-style", "glass");
-  await expect(glassButtons).toHaveCount(2);
-  await expect(glassButtons.last()).toHaveAttribute("aria-pressed", "true");
+  await expect(glassButtons).toHaveCount(1);
+  await expect(glassButtons).toHaveAttribute("aria-pressed", "true");
   // The DOM is the current session's state even when the last persisted value
-  // is still classic. Another control must toggle back correctly.
-  await glassButtons.last().click();
+  // is still classic. The real mobile control must receive that current state.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("nav-menu-button").click();
+  const drawer = page.getByRole("dialog", { name: "Primary navigation", exact: true });
+  const mobileGlass = drawer.getByRole("button", { name: "Switch to classic appearance", exact: true });
+  await expect(mobileGlass).toHaveAttribute("aria-pressed", "true");
+  await mobileGlass.click();
   await expect(page.locator("html")).toHaveAttribute("data-visual-style", "classic");
-  await expect(classicButtons).toHaveCount(2);
+  await expect(drawer.getByRole("button", { name: "Switch to glass appearance", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(classicButtons).toHaveCount(1);
+  await expect(classicButtons).toHaveAttribute("aria-pressed", "false");
 });
 
 for (const appearance of ["classic", "glass"]) {
