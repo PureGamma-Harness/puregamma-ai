@@ -1,93 +1,114 @@
-# Research detail navigation boundary
+# Workspace navigation boundaries
 
-## Repository-grounded execution prompt
+## Problem and execution contract
 
-Diagnose intermittent native Link navigation from the real Research list to a
-research detail route in frozen candidate 3, then introduce the smallest route
-boundary supported by the evidence. Preserve the permanent main landmark,
-shared Main / Suspense hydration fallback, no-JavaScript content, native Link,
-API / capability policy and actual detail effects. Do not disable prefetch,
-replace the navigation with a reload, add retries or extend the acceptance
-timeout. Root owns the next build and controlled old / new verification.
+A completed server response can leave a native workspace navigation displaying
+its previous page. Diagnose that behavior against frozen production artifacts
+and give the existing shared main boundary the identity of the actual route.
+Preserve native navigation, the permanent main landmark, phase-aware fallback,
+no-JavaScript content, providers, active Agent streams and all application
+handlers. Do not substitute reloads, disable prefetch, extend timeouts or add
+retries. Root owns artifact builds and behavior acceptance.
 
-## What was observed
+## Implemented boundary design
 
-Frozen build `VP4OqBxkTE4WKX2yOborP` intermittently stays on `/en/research` after
-clicking the real run Link. The failed workflow trace contains a complete 200
-RSC navigation response with the matching build ID, run ID, client component
-reference and completed metadata records. Its detail chunk also returns 200,
-yet no detail API effects mount. This is distinct from missing backend data or
-a still-downloading response.
+`AppShell` retains its existing main element and inner Suspense. That Suspense
+now has `JSON.stringify([locale, ...useSelectedLayoutSegments()])` as its key.
+The public Next hook follows the actual selected layout tree, so a genuinely
+different route receives a fresh boundary identity. The unchanged fallback
+continues to preserve server children in static documents and render existing
+localized loading feedback during client retries.
 
-An independent GET-only probe on port 3216 retained the native Link and the
-same 10-second URL assertion. It observed failures in two seven-run batches
-(one failure in each); these are diagnostic samples, not acceptance runs.
-Post-timeout runtime inspection confirmed that all five required Webpack chunk
-promises resolved and module 6508 exported `ResearchRunDetail`.
+The key deliberately does not follow the address bar's pathname. Agent's first
+message creates a conversation and uses native `history.replaceState` to rename
+its URL before permission and streaming finish. Next updates `usePathname` for
+that operation but retains its internal layout tree. A pathname-based key would
+remount Agent, whose cleanup aborts that active transaction. The layout-segment
+identity preserves this URL-only rename, as well as query-only report selection
+and same-path Portfolio URL cleanup. Locale remains part of the identity.
 
-A final probe stopped at its first failure to check identity directly. The
-shared main's alternate Suspense fiber retained a wakeable with status
-`fulfilled`, and its value was strictly identical to
-`webpack(6508).ResearchRunDetail`. The root still had equal pending / suspended
-lanes, zero pinged lanes and no scheduled callback. The external App Router
-action queue had completed its detail-route state, while the committed tree
-and browser URL still represented the list. The code required by that
-particular wakeable had therefore resolved; more fetch time was not the missing
-condition in the observed snapshot.
+The earlier conventional `research/[runId]/loading.tsx` entry remains as a
+route-local loading seed and boundary using the existing `WorkspaceLoading`.
+It supplies focused feedback for that detail route; it is not the general
+solution for every lazy destination. No locale-wide loading entry was added.
 
-Diagnostic evidence, outside the repository:
+## Evidence from actual failures
 
-- `/workspace/scratch/worldclass-rsc-foundation-probe/artifacts-v2/probe-native-research-navigation-fiber-diagnostic-repeat1/runtime.json`
+### Research detail and the initial route-local correction
+
+Frozen candidate 3 (`VP4OqBxkTE4WKX2yOborP`) intermittently stayed on the list
+after clicking the real Research run Link. The failed workflow trace contains
+a complete 200 RSC response, matching build and run IDs, completed metadata and
+a successful detail chunk, while no detail effects mount.
+
+An independent GET-only port 3216 probe retained the native Link and original
+10-second URL assertion. Two seven-attempt diagnostic batches each reproduced
+one failure. Post-timeout inspection found all five Webpack chunk promises
+resolved. A final first-failure probe confirmed that the shared main's alternate
+Suspense retained a fulfilled wakeable whose value was strictly identical to
+module 6508's `ResearchRunDetail` export. Root pending and suspended lanes were
+equal, with zero pinged lanes and no scheduled callback. The external App Router
+action queue had completed the target state while the committed URL remained
+on the list.
+
+Adding the Research segment loading entry subsequently passed real Research
+navigation checks, but the later Dashboard failure below demonstrated that a
+route-local correction did not resolve the shared boundary's general identity.
+
+### Hosted onboarding save to Dashboard counterexample
+
+PR61 Web job 132069354549 in run 43478730975 failed the unchanged desktop
+save-failure/retry case. Its intended first save returns 503; the second save
+returns complete 200 `{ok:true,user:...}` data. The fresh Dashboard navigation
+RSC response completes in about 35ms with 16,304 decoded bytes, the final page
+record and metadata. Every referenced client dependency returns 200. The
+15-second URL expectation still observes `/en/onboarding/channels`.
+
+A separate local candidate 5 probe retained that original fixture and
+15-second expectation: nine attempts passed and one reproduced the failure.
+The save-complete local flag is true, the external action queue has Dashboard
+with no pending action, and the shared alternate boundary again retains a
+fulfilled wakeable while the committed router remains on the old page. These
+are diagnostic samples, not substitutes for the original suite or hosted CI.
+
+Evidence remains outside the repository:
+
 - `/workspace/scratch/worldclass-rsc-foundation-probe/artifacts-v3/probe-native-research-navigation-fiber-diagnostic/runtime.json`
-- The adjacent `trace.zip` files and original workflow failed artifacts remain
-  retained. Runtime hooks and Webpack inspection were probe-only; no product
-  bundle or RSC response was rewritten.
+- `/workspace/scratch/worldclass-pr61-ci-failure/unpacked/auth-onboarding/auth-onboarding-save-failu-a537a-ims-an-authentication-error-desktop/trace.zip`
+- `/workspace/scratch/worldclass-auth-fiber-probe/artifacts/auth-onboarding-save-failu-a537a-ims-an-authentication-error-repeat9/fiber-runtime.json`
 
-## Narrow candidate change and its limits
+The fulfilled wakeables and uncommitted transitions are observed facts. They do
+not establish a unique vendor-internal React / Next cause. Runtime hooks and
+Webpack inspection were scratch-only; product bundles and RSC responses were
+not rewritten.
 
-Add the conventional Next loading entry at
-`app/[locale]/research/[runId]/loading.tsx`, rendering the existing localized
-`WorkspaceLoading` feedback. This gives the detail segment its own loading seed
-and Suspense boundary, so its lazy client module has a route-local boundary
-instead of relying solely on the shared main boundary across the transition.
-The feedback has no fake research result, API request or extra main landmark.
+## Verification
 
-The observed failure establishes a fulfilled module wakeable with an uncommitted
-navigation. It does not by itself establish a unique React / Next vendor root
-cause or prove that the new segment boundary resolves every timing case. This
-is a narrowly scoped candidate fix. Root must compare the unchanged real Link
-flow against immutable candidate 3 and the new build, with zero retries and
-the same 10-second expectations, and assert completed detail content / evidence
-as well as the URL. Existing held-module and no-JavaScript main guards remain
-required. A loading indicator alone is not a successful navigation.
+Scoped ESLint, the application TypeScript check, whitespace checking and the
+coordinator's production build pass. Frozen candidate 6 is
+`_wPIb-jZhMuN5vgU83CPH`; the shared-boundary change is its only production-file
+difference from candidate 5. Its 100 authentication/navigation/research/operation
+checks and 20 product-experience checks pass with the original zero-retry
+budgets. A development-environment interruption is recorded separately: completed
+upgrade/foundation runs were retained, partial runs were preserved as interrupted,
+and the remaining complete suites resumed against the same source hashes.
 
-## Source verification
+The unchanged original save-failure/retry probe also passed ten independent
+candidate 6 runs, including actual Dashboard workflows and both saved payloads.
+The same candidate 5 diagnostic sample retained one failure in ten.
 
-Scoped ESLint for the loading entry, the application's
-`tsc --noEmit --incremental false` check and `git diff --check` pass. This owner
-does not build or approve its own candidate for publication. The old / new
-navigation comparison was subsequently completed against frozen builds.
+Two added scenarios run in desktop English and phone Chinese. Holding the real
+Dashboard module through successful setup must commit the destination URL,
+show localized busy feedback and retain native page-search/focus recovery; after
+release the actual workflows must appear. Empty-history first send holds a real
+permission response after native URL assignment, requires the same textarea,
+draft and Stop control to survive a shared-shell update, then crosses the real
+fetch/SSE parser. It requires a complete persisted answer and source after
+reload, one create/PATCH/message request and no cancellation or replay. This is
+a finite owned SSE response; the original incremental Stop/late-stream tests
+continue to cover in-flight stream ownership.
 
-## Controlled browser verification
-
-The coordinator preserved candidate 3's standalone runtime before rebuilding.
-The unchanged real Research scenario, fixture, desktop dimensions, 10-second
-expectations and zero-retry configuration ran twenty times against each build:
-candidate 3 (`VP4OqBxkTE4WKX2yOborP`) retained one URL/commit failure and nineteen
-passes; candidate 4 (`xxkKmnp0tHoyC0q8uMtGE`) passed all twenty, including the
-complete artifact body and source evidence.
-
-A separate regression holds the actual detail-page module request before list
-entry. Both candidate 3 checks, desktop English and phone Chinese, retained the
-failure to commit the detail URL while held. Both candidate 4 checks committed
-the detail URL, displayed localized loading, kept native page search and focus
-recovery usable, and mounted no detail API effects until release. After release,
-both required the real artifact and evidence. This scenario joins the ordinary
-flow in the twenty-case product suite; it does not add a CI retry loop.
-
-Candidate 5 (`996YQ1y_sQpfHWDQFPH6n`) changes only the sidebar's own scroll
-visibility relative to candidate 4. The loading entry is byte-identical, and its
-complete twenty-case product suite passes again with zero retries. Normal image
-and route-cache output is distinguished from preserved application code in the
-runtime manifests. These are bounded browser results and do not identify a
-unique vendor defect or certify every possible schedule.
+The existing held-memory-module, static no-JavaScript/main, permission, refund,
+error, modal/focus and query-only report checks remain. API and capability gates
+are unchanged. Hosted CI and exact committed-source review remain separate
+publication gates; no failed hosted run is replaced by a retry-only green result.

@@ -67,9 +67,12 @@ launch mode has 148 canonical browser visits, 68 release-gate checks and the
 same auxiliary/geometry cases. The original focused workflow discovery totals 96 cases:
 14 upgrade, 10 foundation, 20 authentication, 30 research and 22 operations.
 The product-experience suite adds 20 cases (10 scenarios in desktop and phone
-projects), bringing focused discovery to 116. Its native delayed-module,
-account-state and page-finder assertions supplement the original business and
-error checks; they do not replace them.
+projects). Four further authentication/research cases protect delayed Dashboard
+navigation and first-message continuity across a native conversation URL rename.
+Current focused discovery totals 120: 14 upgrade, 10 foundation, 22
+authentication, 32 research, 22 operations and 20 product-experience checks.
+Their native delayed-module, account-state and page-finder assertions supplement
+the original business and error checks; they do not replace them.
 Actual execution results remain separate from discovery. A scoped unavailable
 state is distinct from a working external provider.
 

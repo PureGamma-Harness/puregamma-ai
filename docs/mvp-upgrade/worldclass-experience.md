@@ -52,6 +52,10 @@ as permission to execute trades or enable a provider.
 - Agent keeps the conversation title and latest question visible while its
   transcript scrolls separately from the composer. Compact history and page
   search use native dialogs with keyboard and focus recovery.
+- The shared working-area boundary follows Next's actual layout segments.
+  Real destination changes can show useful loading while a module is delayed;
+  assigning a newly created conversation's URL through native history keeps
+  its active first-message transaction mounted.
 - Account loading, unavailable identity, missing credits and a confirmed zero
   are separate states. Quotas follow the backend's finite-number contract:
   null or missing data means unknown, never an unlimited entitlement.

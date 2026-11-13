@@ -158,6 +158,46 @@ test("save failure retains recipients for retry and never claims an authenticati
   expect(state.saves[1]).toMatchObject({ notification_channels: ["email", "telegram"], telegram_chat_id: "@offline-reader" });
 });
 
+test("successful setup commits useful loading while the Dashboard module is held", async ({ page }, info) => {
+  const locale = info.project.name === "mobile" ? "zh" : "en";
+  const state = scenarios.get(page)!;
+  let releaseModule!: () => void;
+  const moduleGate = new Promise<void>(resolve => { releaseModule = resolve; });
+  let heldModule = "";
+  // Delay only the real destination module; the save and shared shell stay real.
+  await page.route("**/_next/static/chunks/app/**/dashboard/page-*.js", async route => {
+    const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (!/\/_next\/static\/chunks\/app\/\[locale\]\/dashboard\/page-[^/]+\.js$/.test(pathname)) return route.fallback();
+    heldModule = pathname;
+    await moduleGate;
+    await route.fallback();
+  });
+  const main = page.getByRole("main");
+  try {
+    await page.goto(`/${locale}/onboarding/channels`);
+    await page.getByRole("button", { name: locale === "zh" ? "完成设置" : "Complete Setup", exact: true }).click();
+    await expect.poll(() => state.saves.length).toBe(1);
+    expect(state.saves[0]).toMatchObject({ notification_channels: ["email"] });
+    await expect.poll(() => heldModule).toMatch(/\/dashboard\/page-/);
+    await expect(page).toHaveURL(new RegExp(`/${locale}/dashboard$`));
+    const loading = main.getByRole("status").filter({ hasText: locale === "zh" ? "正在加载工作区…" : "Loading your workspace…" });
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveAttribute("aria-busy", "true");
+    const trigger = page.getByTestId("workspace-search-trigger");
+    await trigger.click();
+    const finder = page.getByRole("dialog", { name: locale === "zh" ? "搜索工作区页面" : "Search workspace pages", exact: true });
+    await expect(finder).toBeVisible();
+    await expect(finder.getByRole("combobox", { name: locale === "zh" ? "页面名称" : "Page name", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(finder).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(loading).toBeVisible();
+    await page.screenshot({ path: info.outputPath("setup-dashboard-module-held.png"), fullPage: false });
+  } finally { releaseModule(); }
+  await expect(main.getByRole("navigation", { name: locale === "zh" ? "研究工作流程" : "Research workflows", exact: true })).toBeVisible();
+  expect(state.saves).toHaveLength(1);
+});
+
 test("only an expired session redirects setup to login with the correct return path", async ({ page }) => {
   scenarios.get(page)!.saveFailures = [401];
   await page.goto("/zh/onboarding/channels");

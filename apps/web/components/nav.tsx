@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
 import { BookOpen, Bot, BrainCircuit, BriefcaseBusiness, ChevronDown, ChevronRight, Code2, CreditCard, FlaskConical, Gauge, HeartHandshake, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Network, Newspaper, Search, Smartphone, UserRound, X, type LucideIcon } from "lucide-react";
 import { AppearanceControls } from "@/components/appearance-controls";
 import { WorkspaceLoading } from "@/components/workspace-feedback";
@@ -159,6 +159,10 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
+  const segments = useSelectedLayoutSegments();
+  // Follow the actual route tree. A history-only URL rename must preserve an
+  // active conversation and its stream instead of remounting the workspace.
+  const routeIdentity = JSON.stringify([locale, ...segments]);
   const closeNavigation = useCallback(() => setMobileNavOpen(false), []);
   const closeCommands = useCallback(() => setCommandOpen(false), []);
   const openCommands = useCallback(() => { setMobileNavOpen(false); setCommandOpen(true); }, []);
@@ -191,7 +195,7 @@ export function AppShell({ children, locale }: { children: ReactNode; locale: Lo
               {/* Isolate pending page modules from shared navigation. Keep the
                   landmark outside the boundary: Fizz may outline even completed
                   large content into a hidden streamed segment. */}
-              <Suspense fallback={<MainContentFallback>{children}</MainContentFallback>}>
+              <Suspense key={routeIdentity} fallback={<MainContentFallback>{children}</MainContentFallback>}>
                 {children}
               </Suspense>
             </main>

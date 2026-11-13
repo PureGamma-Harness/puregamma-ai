@@ -249,6 +249,89 @@ test("a pre-stream send failure restores a draft without automatic replay", asyn
   expect(errors).toEqual([]);
 });
 
+test("a first send keeps its transaction when native history assigns the conversation URL", async ({ page, backend, errors }, info) => {
+  const locale = info.project.name === "mobile-chrome" ? "zh" : "en";
+  const first = { ...conversation, id: "first-created", title: "First owned conversation" };
+  const question = "Keep this first-send transaction after its URL is assigned.";
+  const answer = "# First response after URL assignment\n\nThe complete owned answer remains visible.";
+  const source = { citation_index: 1, provider: "Owned fixture", title: "First-send source", url: "https://example.com/first-send", fetched_at: now, published_at: null, source_timestamp: now };
+  const savedMessages = [
+    { id: "first-user", conversation_id: first.id, role: "user", content: question, status: "completed", input_tokens: 8, output_tokens: 0, created_at: now, sources: [] },
+    { id: "first-assistant", conversation_id: first.id, role: "assistant", content: answer, status: "completed", model: "default", input_tokens: 8, output_tokens: 24, credits_used: 2, credits_refunded: false, created_at: now, sources: [source] },
+  ];
+  let created = false;
+  let completed = false;
+  let releasePermission!: () => void;
+  let releaseMessage!: () => void;
+  const permissionGate = new Promise<void>(resolve => { releasePermission = resolve; });
+  const messageGate = new Promise<void>(resolve => { releaseMessage = resolve; });
+  let messagePosts = 0;
+  backend.handlers.set("GET /me", () => ({ body: { user: { id: "offline-user", role: "user", name: "Researcher", email: "research@example.invalid", plan: "Pro", credit_balance: completed ? 98 : 100 } } }));
+  backend.handlers.set("GET /api/agent/conversations", () => ({ body: { conversations: created ? [first] : [] } }));
+  backend.handlers.set("POST /api/agent/conversations", () => { created = true; return { body: { conversation: first } }; });
+  backend.handlers.set("PATCH /api/agent/conversations/first-created", async () => { await permissionGate; return { body: { conversation: first } }; });
+  backend.handlers.set("GET /api/agent/conversations/first-created", () => ({ body: { conversation: first, messages: completed ? savedMessages : [] } }));
+  backend.handlers.set("GET /api/agent/capabilities", () => ({ body: { capabilities, quota: { ...quota, credit_balance: completed ? 98 : 100 }, models: [{ id: "default", display_name: "Offline model", available: true }], skills: [] } }));
+  backend.handlers.set("GET /api/agent/quota", () => ({ body: { ...quota, credit_balance: completed ? 98 : 100 } }));
+  // The owned response crosses the real fetch/SSE parser after the URL rename.
+  await page.route("**/conversations/first-created/messages", async route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toMatchObject({ content: question, locale });
+    messagePosts += 1;
+    await messageGate;
+    completed = true;
+    await route.fulfill({ contentType: "text/event-stream", body:
+      'event: run.started\ndata: {"runId":"first-run","messageId":"first-assistant","creditBalance":98}\n\n' +
+      `event: message.delta\ndata: ${JSON.stringify({ messageId: "first-assistant", delta: answer })}\n\n` +
+      'event: message.completed\ndata: {"messageId":"first-assistant","model":"default","inputTokens":8,"outputTokens":24,"creditsUsed":2,"creditBalance":98}\n\n' });
+  });
+  const main = page.getByRole("main");
+  try {
+    await page.goto(`/${locale}/chat`);
+    await expect(chatComposer(page)).toBeEnabled();
+    const originalComposer = await chatComposer(page).elementHandle();
+    await chatComposer(page).fill(question);
+    await main.getByRole("button", { name: locale === "zh" ? "发送" : "Send", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/${locale}/chat/first-created$`));
+    await expect.poll(() => backend.reads.filter(read => read.method === "PATCH" && read.path === "/api/agent/conversations/first-created").length).toBe(1);
+    // A real shell update must preserve the pending first-send transaction.
+    await page.getByTestId("workspace-search-trigger").click();
+    const finder = page.getByRole("dialog", { name: locale === "zh" ? "搜索工作区页面" : "Search workspace pages", exact: true });
+    await expect(finder).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(finder).toBeHidden();
+    await expect(main.getByRole("button", { name: locale === "zh" ? "停止生成" : "Stop generation", exact: true })).toBeVisible();
+    expect(await chatComposer(page).evaluate((element, original) => element === original, originalComposer)).toBe(true);
+    await expect(chatComposer(page)).toHaveValue(question);
+    expect(backend.reads.filter(read => read.method === "GET" && read.path === "/api/agent/conversations")).toHaveLength(1);
+    releasePermission();
+    await expect.poll(() => messagePosts).toBe(1);
+    await expect(main.getByRole("button", { name: locale === "zh" ? "停止生成" : "Stop generation", exact: true })).toBeVisible();
+    releaseMessage();
+    await expect(main.getByText("The complete owned answer remains visible.", { exact: true })).toBeVisible();
+    await expect(chatComposer(page)).toBeEnabled();
+    await expect(chatComposer(page)).toHaveValue("");
+    await expect(main.getByRole("button", { name: locale === "zh" ? "发送" : "Send", exact: true })).toBeVisible();
+    const historyName = locale === "zh" ? "历史对话" : "Conversation history";
+    const phoneHistory = page.viewportSize()!.width < 1280;
+    if (phoneHistory) await main.getByTestId("chat-history-trigger").click();
+    const history = main.getByRole(phoneHistory ? "dialog" : "complementary", { name: historyName, exact: true });
+    await expect(history.getByRole("button", { name: /^First owned conversation/ })).toBeVisible();
+    if (phoneHistory) await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(main.getByRole("heading", { name: "First response after URL assignment", exact: true, level: 2 })).toBeVisible();
+    await expect(main.getByText("The complete owned answer remains visible.", { exact: true })).toBeVisible();
+    await expect(main.getByRole("link", { name: /First-send source/ })).toHaveAttribute("href", source.url);
+    await expect(chatComposer(page)).toBeEnabled();
+    await expect(page).toHaveURL(new RegExp(`/${locale}/chat/first-created$`));
+    expect(messagePosts).toBe(1);
+    expect(backend.reads.filter(read => read.method === "POST" && read.path === "/api/agent/conversations")).toHaveLength(1);
+    expect(backend.reads.filter(read => read.method === "PATCH" && read.path === "/api/agent/conversations/first-created")).toHaveLength(1);
+    expect(backend.reads.filter(read => read.path.endsWith("/cancel"))).toHaveLength(0);
+    await noOverflow(page); expect(errors).toEqual([]);
+  } finally { releasePermission(); releaseMessage(); }
+});
+
 test("late news filters cannot replace current evidence and topics open editable drafts", async ({ page, backend, errors }) => {
   let release: (() => void) | undefined;
   backend.handlers.set("GET /api/news", async read => {

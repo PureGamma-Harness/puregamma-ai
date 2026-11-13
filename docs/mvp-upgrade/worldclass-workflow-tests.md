@@ -65,13 +65,63 @@ to 640px height, then returns to Dashboard through the page finder and checks th
 upper row. Each check requires intersection within the sidebar's own scroll
 viewport and `window.scrollY === 0`; the test does not scroll the row for the app.
 
-The research suite retains its thirty cases and original business, error,
-async, no-auto-send and time-budget checks. Phone report tests deliberately
-return to the archive before filtering or selecting a different record. History
-deletion checks inspect the actual visible conversation panel and the error
-location appropriate to desktop or phone.
+The auth suite retains its twenty cases and adds two controlled Dashboard
+module-delay cases: desktop English and phone Chinese. A successful owned save
+must commit the destination URL and localized busy main while the module is
+held. The real page finder must keep its keyboard/focus behavior, and releasing
+the module must reveal the actual Dashboard workflows without another save.
 
-## Candidate 5 verification
+The research suite retains its thirty cases and original business, error,
+async, no-auto-send and time-budget checks. Two additional first-send cases
+verify that native history assigning a conversation URL preserves the mounted
+composer, pending permission and message transaction. The owned responses then
+complete through the real SSE parser; the recorded answer and source survive a
+reload, with no cancellation or replay. These cases use local mocked writes.
+Phone report tests deliberately return to the archive before filtering or
+selecting a different record. History deletion checks inspect the actual visible
+conversation panel and the error location appropriate to desktop or phone.
+
+## Candidate 6 verification
+
+Frozen candidate: `_wPIb-jZhMuN5vgU83CPH`, Node 22.23.4 and official Playwright
+Chromium 149.0.7827.55. All 306 production-source hashes and the current suite,
+fixture and configuration hashes match before and after the complete run.
+
+The unchanged twenty-case product suite passes **20/20**, zero retries
+(1.3 minutes). It records 370 GETs to the owned fixture, 13 locally declined quote
+reads, zero mutation attempts, zero unexpected outside origins and zero page
+errors. All 49 analytics-script attempts were blocked. An earlier run was
+interrupted by an environment restart after the desktop ten cases; its partial
+log is retained and excluded from this complete result.
+
+The completed focused browser matrix is **120/120**: upgrade 14, foundation 10,
+auth 22, research 32, operations 22 and product workflows 20. The first two
+completed suites were retained across the restart after confirming the same
+build and source hashes. Auth, research, operations and the product suite each
+completed in a fresh full run after recovery; partial interrupted auth results
+are excluded. Existing budgets and zero automatic retries remain unchanged.
+The four added regression cases also pass in targeted runs: two held-Dashboard
+cases and two first-send ownership cases. They are counted once in the matrix.
+The additional React 26/26, Node 67/67 and copied-workspace 5/5 checks also pass
+against this candidate; together with the focused browser suites, 218 checks
+complete successfully.
+
+The new Dashboard module-delay test also ran once against the preserved
+candidate 5 runtime with the same 60-second case budget, 15-second expectations
+and actions, browser, viewports and zero retries:
+
+| Held Dashboard module, after one successful owned save | Preserved candidate 5 | Candidate 6 |
+| --- | --- | --- |
+| Desktop English and phone Chinese | Both retained failures: URL stayed on setup at 15 seconds | Both pass: destination URL/loading/search while held, then actual workflows |
+
+The control's application/runtime code and 21 internal symlinks match before and
+after. Only two generated image-cache filenames refresh; their bytes are
+unchanged. Failures and traces are retained. The comparison establishes the
+specified navigation regression; it does not establish a vendor root cause.
+The Main boundary uses the actual route segments so a native conversation URL
+rename does not reset an active first-send transaction.
+
+## Candidate 5 verification (historical)
 
 Frozen candidate: `996YQ1y_sQpfHWDQFPH6n`.
 
