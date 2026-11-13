@@ -95,3 +95,14 @@ Detailed reproduction, counts and artifact manifests are retained in
 `round7-harness-artifacts-node{22,24}.json`. These offline checks do not claim a
 live provider session or every historical Node patch. Independent frozen-source
 review and hosted CI remain required before merge.
+
+## Hosted closure
+
+The reviewed commit `418d4877a647d9c479419ca29e03a82ba802d22b` passed both
+Node matrix jobs in [run 43451071628](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43451071628).
+Independent review matched all nine remote files to the approved source before
+[PR #57](https://github.com/PureGamma-Harness/puregamma-ai/pull/57) merged as
+`b3bdf88f7c63ba5d53ec7ec9dd573e36b703d056`. The separate default-branch
+[run 43451894101](https://github.com/PureGamma-Harness/puregamma-ai/actions/runs/43451894101)
+also passed. Those hosted results complete the earlier pre-merge requirement;
+the local Node 22.23.4 and CI's pinned Node 22.20.0 remain distinct evidence.
