@@ -463,14 +463,21 @@ def _gather_evidence(db: Session, row: HarnessResearchRun) -> list[dict[str, Any
         allowed_types = set().union(*DATA_SOURCE_EVENT_TYPES.values())
 
     snapshot = build_research_events(db, kind="harness", window_hours=24)
+    # Deduplicated events retain their creation snapshot. The new build's
+    # explicit observations include reused events, while an empty/failed
+    # source contributes no old evidence merely because it is still active.
+    observed_ids: list[str] = []
+    for event_type in allowed_types:
+        source_health = (snapshot.health_json or {}).get(event_type) or {}
+        observed_ids.extend(source_health.get("observed_event_ids") or [])
     events = (
         db.query(MarketEvent)
         .filter(
-            MarketEvent.research_snapshot_id == snapshot.id,
+            MarketEvent.id.in_(observed_ids),
             MarketEvent.status == "active",
             MarketEvent.event_type.in_(allowed_types),
         )
-        .order_by(MarketEvent.confidence.desc(), MarketEvent.collected_at.desc())
+        .order_by(MarketEvent.confidence.desc(), MarketEvent.collected_at.desc(), MarketEvent.id)
         .limit(MAX_EVIDENCE_ITEMS)
         .all()
     )

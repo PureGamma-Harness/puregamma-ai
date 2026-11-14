@@ -637,6 +637,25 @@ def build_research_events(db: Session, kind: str = "intraday", window_hours: int
     for event in created:
         source_counts[event.event_type] = source_counts.get(event.event_type, 0) + 1
 
+    # Creation ownership and observation membership are different: a repeated
+    # candidate keeps its original event/snapshot, but is still evidence in
+    # this build. Record only candidates observed now, never a historical
+    # window fallback (which could hide a current provider failure).
+    observed_by_source: dict[str, list[str]] = {name: [] for name in health}
+    fingerprints = {candidate["fingerprint"] for candidate in candidates}
+    if fingerprints:
+        observed = (
+            db.query(MarketEvent.id, MarketEvent.event_type)
+            .filter(MarketEvent.fingerprint.in_(fingerprints), MarketEvent.status == "active")
+            .order_by(MarketEvent.id)
+            .all()
+        )
+        for event_id, event_type in observed:
+            if event_type in observed_by_source:
+                observed_by_source[event_type].append(event_id)
+    for source, info in health.items():
+        info["observed_event_ids"] = observed_by_source[source]
+
     snapshot.source_counts_json = source_counts
     snapshot.health_json = health
     snapshot.status = "completed"

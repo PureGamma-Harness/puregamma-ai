@@ -51,7 +51,7 @@ jobs:
       - run: pnpm test:runtime-security
       - run: node --test tests/offline-fetch-guard.test.cjs
       - name: Verify product context, appearance, and session ownership
-        run: node --test tests/appearance-preferences.test.cjs tests/auth-onboarding-compat.test.cjs tests/plotly-chart-data.test.cjs tests/data-source-status.test.cjs tests/legacy-query-preservation.test.cjs tests/route-recovery.test.cjs tests/session-ownership.test.cjs
+        run: node --test tests/appearance-preferences.test.cjs tests/auth-onboarding-compat.test.cjs tests/plotly-chart-data.test.cjs tests/data-source-status.test.cjs tests/legacy-query-preservation.test.cjs tests/route-recovery.test.cjs tests/session-ownership.test.cjs tests/research-status-integrity.test.cjs
       - run: pnpm build
       - name: Verify the standalone runtime's actual image library
         run: |
@@ -76,6 +76,16 @@ jobs:
         run: pnpm exec playwright test --config playwright.auth-onboarding.config.ts
       - name: Verify research and Agent journeys
         run: pnpm exec playwright test --config playwright.research.config.ts
+      - name: Verify research evidence and terminal-state integrity
+        run: pnpm exec playwright test --config playwright.research-integrity.config.ts --output=test-results/research-integrity
+      - name: Preserve research integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-integrity
+          path: apps/web/test-results/research-integrity/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Verify financial and account operation journeys
         env:
           PG_OPERATIONS_STANDALONE: '1'
