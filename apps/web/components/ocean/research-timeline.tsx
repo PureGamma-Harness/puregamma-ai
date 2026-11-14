@@ -2,7 +2,7 @@
 
 import { CircleCheck, CircleX, CircleDashed, Loader2 } from "lucide-react";
 
-export type TimelineStatus = "done" | "active" | "pending" | "failed" | "skipped";
+export type TimelineStatus = "done" | "active" | "pending" | "failed" | "skipped" | "unknown";
 
 export type TimelineNode = {
   id: string;
@@ -22,32 +22,20 @@ export const RESEARCH_STAGES: { id: string; en: string; zh: string }[] = [
   { id: "artifact", en: "Research Artifact", zh: "研究产出" },
 ];
 
-/** Maps a backend run status to per-stage states. Unknown status -> all pending. */
-export function stagesForStatus(status: string): TimelineNode[] {
-  const order = ["question", "planner", "sources", "evidence", "validation", "artifact"];
-  let activeIndex: number;
-  switch (status) {
-    case "queued": activeIndex = 0; break;
-    case "preparing": activeIndex = 1; break;
-    case "running": activeIndex = 2; break;
-    case "validating": activeIndex = 4; break;
-    case "completed": activeIndex = 6; break;
-    case "degraded": activeIndex = 6; break;
-    case "failed":
-    case "timed_out":
-      return RESEARCH_STAGES.map((stage, index) => ({
-        ...stage,
-        status: index < 4 ? "done" : (index === 4 || index === 5) && status === "failed" ? "failed" : "pending",
-      })) as TimelineNode[];
-    case "canceled":
-      return RESEARCH_STAGES.map((stage, index) => ({ ...stage, status: index < 2 ? "done" : "skipped" })) as TimelineNode[];
-    default:
-      activeIndex = -1;
-  }
-  return RESEARCH_STAGES.map((stage, index): TimelineNode => ({
-    ...stage,
-    status: index < activeIndex ? "done" : index === activeIndex ? "active" : "pending",
-  }));
+/** Aggregate run status is not a stage history. Only recorded content confirms completion. */
+export function stagesForStatus(status: string, recorded: { evidenceRecorded?: boolean; artifactRecorded?: boolean } = {}): TimelineNode[] {
+  const knownStatus = ["queued", "preparing", "running", "validating", "completed", "degraded", "failed", "timed_out", "canceled", "cancelled"].includes(status);
+  return RESEARCH_STAGES.map((stage): TimelineNode => {
+    let stageStatus: TimelineStatus = "unknown";
+    if (stage.id === "question" && knownStatus) stageStatus = "done";
+    if ((stage.id === "sources" || stage.id === "evidence") && recorded.evidenceRecorded) stageStatus = "done";
+    if (stage.id === "artifact" && recorded.artifactRecorded) stageStatus = "done";
+    if (status === "queued" && stage.id !== "question") stageStatus = "pending";
+    if (status === "preparing" && (stage.id === "sources" || stage.id === "evidence")) stageStatus = "active";
+    if (status === "running" && stage.id === "artifact") stageStatus = "active";
+    if (status === "validating" && stage.id === "validation") stageStatus = "active";
+    return { ...stage, status: stageStatus };
+  });
 }
 
 const STATUS_ICON: Record<TimelineStatus, typeof CircleCheck> = {
@@ -56,6 +44,7 @@ const STATUS_ICON: Record<TimelineStatus, typeof CircleCheck> = {
   pending: CircleDashed,
   failed: CircleX,
   skipped: CircleX,
+  unknown: CircleDashed,
 };
 
 /**
@@ -87,6 +76,7 @@ export function ResearchTimeline({ nodes, locale }: { nodes: TimelineNode[]; loc
                 <span className="font-medium">{locale === "zh" ? node.zh : node.en}</span>
                 {node.status === "failed" ? <span className="text-xs">{locale === "zh" ? "失败" : "failed"}</span> : null}
                 {node.status === "skipped" ? <span className="text-xs">{locale === "zh" ? "已跳过" : "skipped"}</span> : null}
+                {node.status === "unknown" ? <span className="text-xs">{locale === "zh" ? "未确认" : "Not confirmed"}</span> : null}
               </div>
               {node.detail ? <p className="mt-0.5 text-xs leading-5 text-text-pg-muted">{node.detail}</p> : null}
             </div>

@@ -169,37 +169,53 @@ def stream_events(
     transaction open between polls.
     """
     row = _own_run(db, user, run_id)
-    last_status = row.status
+    owner_id = user.id
+    initial = {"status": row.status, "updated_at": str(row.updated_at), "error": row.error_summary}
+    bind = db.get_bind()
+    # Authentication and ownership checks started a read transaction. Release
+    # it before streaming; retaining it also hides worker commits under repeatable
+    # read isolation. Each poll below owns a separate, short-lived read session.
+    db.rollback()
 
     def event_stream():
-        nonlocal last_status
-        yield _sse("run.state", {"run_id": run_id, "status": last_status, "updated_at": str(row.updated_at)})
+        current = initial
+        yield _sse("run.state", {"run_id": run_id, "status": current["status"], "updated_at": current["updated_at"]})
         deadline = time.monotonic() + 90
-        while time.monotonic() < deadline:
+        while True:
+            status = current["status"]
+            terminal = {"run_id": run_id, "status": status, "updated_at": current["updated_at"]}
+            if status in {"completed", "degraded"}:
+                yield _sse("run.completed", {**terminal, "verified": status == "completed", "degraded": status == "degraded"})
+                return
+            if status in {"failed", "timed_out"}:
+                yield _sse("run.failed", {**terminal, "message": current["error"] or ("timed out" if status == "timed_out" else "failed")})
+                return
+            if status == "canceled":
+                yield _sse("run.canceled", terminal)
+                return
+            if time.monotonic() >= deadline:
+                yield _sse("run.state", terminal)
+                return
             time.sleep(2)
-            fresh = db.get(HarnessResearchRun, run_id)
-            if fresh is None or fresh.user_id != user.id:
+            # Select scalar fields so no expired ORM entity escapes the session.
+            # Close/rollback before yielding or sleeping, including early exits.
+            with Session(bind=bind) as reader:
+                fresh = reader.query(
+                    HarnessResearchRun.status, HarnessResearchRun.updated_at,
+                    HarnessResearchRun.error_summary,
+                ).filter(
+                    HarnessResearchRun.id == run_id,
+                    HarnessResearchRun.user_id == owner_id,
+                ).one_or_none()
+                observed = None if fresh is None else {
+                    "status": fresh.status, "updated_at": str(fresh.updated_at), "error": fresh.error_summary,
+                }
+            if observed is None:
                 yield _sse("run.failed", {"run_id": run_id, "message": "run disappeared"})
                 return
-            if fresh.status != last_status:
-                last_status = fresh.status
-                yield _sse("run.state", {"run_id": run_id, "status": fresh.status, "updated_at": str(fresh.updated_at)})
-            if fresh.status == "completed":
-                yield _sse("run.completed", {"run_id": run_id, "verified": True, "degraded": False})
-                return
-            if fresh.status == "degraded":
-                yield _sse("run.completed", {"run_id": run_id, "verified": False, "degraded": True})
-                return
-            if fresh.status == "failed":
-                yield _sse("run.failed", {"run_id": run_id, "message": fresh.error_summary or "failed"})
-                return
-            if fresh.status == "canceled":
-                yield _sse("run.canceled", {"run_id": run_id})
-                return
-            if fresh.status == "timed_out":
-                yield _sse("run.failed", {"run_id": run_id, "message": "timed out"})
-                return
-        yield _sse("run.state", {"run_id": run_id, "status": last_status, "updated_at": str(fresh.updated_at) if fresh else None})
+            if observed["status"] != current["status"]:
+                yield _sse("run.state", {"run_id": run_id, "status": observed["status"], "updated_at": observed["updated_at"]})
+            current = observed
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

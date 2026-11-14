@@ -216,7 +216,7 @@ class TestHarnessPipeline:
         from packages.database.models import HarnessResearchRun, MarketEvent, utcnow as model_utcnow
 
         run = _create_run(api_client, pro_user, sources=["earnings"]).json()["run"]
-        snapshot = SimpleNamespace(id="snap-filter-test")
+        snapshot = SimpleNamespace(id="snap-filter-test", health_json={})
         monkeypatch.setattr(research_event_service, "build_research_events", lambda db, **kwargs: snapshot)
         row = db.get(HarnessResearchRun, run["id"])
         for event_type, title in [("earnings_confirmed", "E1"), ("news", "N1"), ("price_move", "P1")]:
@@ -235,6 +235,10 @@ class TestHarnessPipeline:
                 )
             )
         db.commit()
+        snapshot.health_json = {
+            event.event_type: {"observed_event_ids": [event.id]}
+            for event in db.query(MarketEvent).filter_by(research_snapshot_id=snapshot.id).all()
+        }
         items = harness_run_service._gather_evidence(db, row)
         assert {item["source_scope"] for item in items} == {"earnings_confirmed"}
 
