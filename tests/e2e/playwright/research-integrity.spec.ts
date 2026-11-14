@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { writeFile } from "node:fs/promises";
 import { expect, test as base, type Page, type TestInfo } from "@playwright/test";
 
 // Constructed source and transport fixtures, not user research or live model output.
@@ -118,7 +119,9 @@ async function openActive(page: Page, backend: Backend) {
 async function capture(page: Page, backend: Backend, info: TestInfo) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: info.outputPath("research-integrity.png"), fullPage: true });
-  await info.attach("fixture-network", { body: JSON.stringify({ reads: backend.reads, run: backend.run }, null, 2), contentType: "application/json" });
+  const networkPath = info.outputPath("fixture-network.json");
+  await writeFile(networkPath, JSON.stringify({ reads: backend.reads, run: backend.run }, null, 2));
+  await info.attach("fixture-network", { path: networkPath, contentType: "application/json" });
 }
 
 test("degraded SSE remains partial when the detail refresh is unavailable", async ({ page, backend, errors }, info) => {
@@ -166,7 +169,9 @@ test("a late running poll cannot overwrite a newer degraded terminal event", asy
     // poll to hide a transient regression back to Running.
     expect(await status(page, "Degraded").isVisible()).toBe(true);
     expect(await status(page, "Running").count()).toBe(0);
-    await info.attach("late-poll-state-observations", { body: JSON.stringify(observed), contentType: "application/json" });
+    const observationsPath = info.outputPath("late-poll-state-observations.json");
+    await writeFile(observationsPath, JSON.stringify(observed));
+    await info.attach("late-poll-state-observations", { path: observationsPath, contentType: "application/json" });
     await capture(page, backend, info); expect(errors).toEqual([]);
   } finally { oldPoll.resolve({ status: 503, body: { detail: "Disposed" } }); }
 });
