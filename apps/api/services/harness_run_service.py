@@ -37,6 +37,10 @@ from packages.database.models import (
 )
 from packages.harness.adapter import artifact_content_hash
 from packages.harness.citations import CITATION_POLICY_VERSION, validate_citation_markers
+from packages.harness.retrieval import (
+    Candidate, Selection, model_selection_note, normalized_assets,
+    resolve_query_assets, select_evidence,
+)
 from packages.harness.composition import MINIMAL_CORDIS_COMPOSITION
 from packages.harness.state_machine import TERMINAL_STATES, transition_run
 from packages.harness.versions import PINNED_HARNESS_VERSIONS, compute_input_hash
@@ -69,6 +73,37 @@ class HarnessQuotaError(RuntimeError):
 
 class HarnessStateConflict(RuntimeError):
     pass
+
+
+class GatheredEvidence(list):
+    """Keep query metadata outside the immutable, source-only item payload."""
+    def __init__(self, items: list[dict[str, Any]], selection: dict[str, Any]):
+        super().__init__(items)
+        self.selection = selection
+
+
+def _trusted_research_input(row: HarnessResearchRun) -> dict[str, Any] | None:
+    usage = row.usage_json if isinstance(row.usage_json, dict) else {}
+    recorded = usage.get("research_input")
+    if not isinstance(recorded, dict) or type(recorded.get("version")) is not int or recorded["version"] != 1:
+        return None
+    if not isinstance(recorded.get("source"), str) or recorded["source"] not in {"request", "retry_original"}:
+        return None
+    prompt, name = recorded.get("raw_prompt"), recorded.get("raw_name")
+    if not isinstance(prompt, str) or not prompt or len(prompt) > MAX_PROMPT_CHARS or not isinstance(name, str):
+        return None
+    # Creation trims before truncating to 120 characters, so only a full-length
+    # stored name can legitimately end in whitespace introduced by truncation.
+    if not name or len(name) > 120 or name != name.lstrip() or (len(name) < 120 and name != name.rstrip()):
+        return None
+    if prompt != prompt.strip() or row.requested_goal_summary != f"{name}\n{prompt}":
+        return None
+    parent_run_id = recorded.get("parent_run_id")
+    if parent_run_id is not None and (not isinstance(parent_run_id, str) or not parent_run_id):
+        return None
+    if parent_run_id != usage.get("retry_of"):
+        return None
+    return recorded
 
 
 def _iso(value: Any) -> str | None:
@@ -136,6 +171,7 @@ def create_harness_run(
     data_sources: list[str],
     skill: str,
     retry_of: str | None = None,
+    _input_source: str = "request",
 ) -> tuple[HarnessResearchRun, bool]:
     """Create (or idempotently return) a harness run. Returns (row, created)."""
     settings = get_settings()
@@ -249,6 +285,12 @@ def create_harness_run(
             "retry_of": retry_of,
             "reservation_key": f"harness-run:{run_id}",
             "credits_estimate": quote.credits,
+            # These are the validated/trimmed request values, preserving the
+            # complete question body and internal newlines, not transport bytes.
+            "research_input": {
+                "version": 1, "raw_prompt": prompt, "raw_name": name,
+                "source": _input_source, "parent_run_id": retry_of,
+            },
         },
         idempotency_key=idempotency_key,
         trace_id=run_id,
@@ -351,6 +393,9 @@ def retry_harness_run(db: Session, user_id: str, run_id: str) -> HarnessResearch
     parts = goal.split("\n", 1)
     name = parts[0][:120] or "Research"
     prompt = parts[1] if len(parts) > 1 else goal
+    original = _trusted_research_input(row)
+    if original is not None:
+        name, prompt = original["raw_name"], original["raw_prompt"]
     data_sources = (row.usage_json or {}).get("data_sources") or []
     skill = (row.usage_json or {}).get("skill") or "harness_deep_research"
 
@@ -362,6 +407,7 @@ def retry_harness_run(db: Session, user_id: str, run_id: str) -> HarnessResearch
         data_sources=data_sources,
         skill=skill,
         retry_of=row.id,
+        _input_source="retry_original" if original is not None else "legacy_reconstructed",
     )
     if new_row.status == "queued":
         queue_harness_run(db, new_row.id)
@@ -470,7 +516,7 @@ def _gather_evidence(db: Session, row: HarnessResearchRun) -> list[dict[str, Any
     for event_type in allowed_types:
         source_health = (snapshot.health_json or {}).get(event_type) or {}
         observed_ids.extend(source_health.get("observed_event_ids") or [])
-    events = (
+    eligible = (
         db.query(MarketEvent)
         .filter(
             MarketEvent.id.in_(observed_ids),
@@ -478,8 +524,30 @@ def _gather_evidence(db: Session, row: HarnessResearchRun) -> list[dict[str, Any
             MarketEvent.event_type.in_(allowed_types),
         )
         .order_by(MarketEvent.confidence.desc(), MarketEvent.collected_at.desc(), MarketEvent.id)
-        .limit(MAX_EVIDENCE_ITEMS)
-        .all()
+    )
+    original = _trusted_research_input(row)
+    mentions = resolve_query_assets(original["raw_prompt"]) if original is not None else ()
+    if mentions:
+        # Inspect only eligible IDs/asset tags before applying the item budget.
+        # Reading all full summaries first would make the budget meaningless.
+        candidates = [Candidate(item.id, normalized_assets(item.assets)) for item in eligible.with_entities(MarketEvent.id, MarketEvent.assets).all()]
+        selection = select_evidence(candidates, mentions, limit=MAX_EVIDENCE_ITEMS)
+        selected_rows = eligible.filter(MarketEvent.id.in_(selection.ids)).populate_existing().limit(MAX_EVIDENCE_ITEMS).all()
+        by_id = {event.id: event for event in selected_rows}
+        events = [by_id[event_id] for event_id in selection.ids if event_id in by_id]
+        eligible_count = selection.eligible_count
+        reason = selection.reason
+    else:
+        # Legacy input has no reliable question boundary. Broad/unknown queries
+        # retain the old one-query, quality-ordered LIMIT path.
+        events = eligible.limit(MAX_EVIDENCE_ITEMS).all()
+        eligible_count = None
+        reason = "no_explicit_asset" if original is not None else "original_question_unavailable"
+    covered = tuple(asset for asset in mentions if any(asset in normalized_assets(event.assets) for event in events))
+    selection = Selection(
+        ids=tuple(event.id for event in events), mentions=mentions, covered=covered,
+        missing=tuple(asset for asset in mentions if asset not in covered),
+        eligible_count=eligible_count, capacity=MAX_EVIDENCE_ITEMS, reason=reason,
     )
     items: list[dict[str, Any]] = []
     for index, event in enumerate(events, start=1):
@@ -491,13 +559,14 @@ def _gather_evidence(db: Session, row: HarnessResearchRun) -> list[dict[str, Any
                 "title": event.title,
                 "url": event.source_url,
                 "source_scope": event.event_type or "market",
+                "assets": list(normalized_assets(event.assets)),
                 "excerpt": (event.summary or "")[:MAX_EVIDENCE_EXCERPT],
                 "is_verified": True,
                 "verification_note": None,
                 "fetched_at": _iso(event.collected_at),
             }
         )
-    return items
+    return GatheredEvidence(items, selection.summary(input_source=original["source"] if original else "unavailable_or_legacy"))
 
 
 def _advance_run(
@@ -605,6 +674,9 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
     usage = dict(run.usage_json or {})
     usage["evidence_count"] = len(evidence_items)
     usage["evidence_ids"] = [item["id"] for item in evidence_items]
+    selection_summary = getattr(evidence_items, "selection", None)
+    if isinstance(selection_summary, dict):
+        usage["evidence_selection"] = selection_summary
     run.usage_json = usage
     db.commit()
 
@@ -617,13 +689,21 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
         "data, never give trading orders, never promise returns. End with "
         "limitations and a one-paragraph summary."
     )
+    def source_assets(item: dict[str, Any]) -> str:
+        assets = normalized_assets(item.get("assets"))
+        label = ", ".join(asset.replace("\n", " ")[:32] for asset in assets[:2]) or "unrecorded"
+        return label + (f" (+{len(assets) - 2} more)" if len(assets) > 2 else "")
+
     excerpts = "\n\n".join(
-        f"[{item['citation_index']}] {item['title']} — {item['excerpt']}" for item in evidence_items
+        f"[{item['citation_index']}] Assets: {source_assets(item)}. {str(item['title'])[:200]} — {item['excerpt']}" for item in evidence_items
     )
+    original = _trusted_research_input(run)
+    question = original["raw_prompt"] if original else run.requested_goal_summary
+    question_label = "Research question" if original else "Historical request (original question boundary unverified)"
     request = {
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"Research goal:\n{run.requested_goal_summary}\n\nEvidence:\n{excerpts[:8000]}"},
+            {"role": "user", "content": f"{question_label}:\n{question}\n\nSelection coverage:\n{model_selection_note(selection_summary)}\n\nEvidence:\n{excerpts[:8000]}"},
         ],
         "max_tokens": MAX_ARTIFACT_TOKENS,
     }
@@ -703,6 +783,7 @@ def _execute_run(db: Session, run: HarnessResearchRun) -> dict[str, Any]:
             "citations_matched": matched,
             "citations_total": len(evidence_items),
             "citation_policy_version": CITATION_POLICY_VERSION,
+            "evidence_selection": selection_summary,
             "referenced_citation_indexes": list(validation.referenced),
             "unknown_citation_indexes": list(validation.unknown),
             "malformed_citation_markers": list(validation.malformed),

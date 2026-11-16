@@ -36,6 +36,7 @@ whole-route health and mutation journeys as separate evidence.
 | Agent retrieval | [RAG and context](rag-orchestration.md) | Consented structured memory, bounded lexical ranking, tenant idempotency, valid evidence JSON and owned current-turn history |
 | Research execution | [Harness](harness-quality.md) | Full request identity, stage claims, cancel/deadline handling, atomic terminal artifacts, owned immutable snapshots and numeric citation integrity |
 | Research integrity | [Evidence and completion](research-evidence-integrity.md) | Current-observation reuse, authoritative SSE terminal states, honest stage/verification semantics and Markdown-aware reference checks |
+| Query-grounded evidence | [Asset coverage](query-grounded-evidence.md) | Trusted question provenance, pre-cap explicit-asset coverage, bounded background selection and auditable attribution |
 | Native tool evidence | [Harness tool output](harness-tool-output.md) | Real SDK evidence projection, actual sandbox state, provenance/health priority and explicit bounded omissions |
 | Chart reliability | [Charts](chart-reliability.md) | Announced loading/error, retry, per-attempt canvas ownership and bounded preview of actual supplied values |
 | Provider status | [Data sources](data-source-status.md) | Preserve server availability and distinguish empty, unauthorized and failed reads without enabling a provider |
